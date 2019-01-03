@@ -2,37 +2,8 @@
 
 import os.path
 
+from zendown import defaults
 from zendown.utils import fatal_error
-
-
-ARTICLE_TXT = """
----
-layout: footer
-title: My first article
-targets: html
----
-
-This is my first article in {{project_name}}!
-
-{{image tiger.jpg}}
-""".strip()
-
-
-FOOTER_TXT = """
-{{body}}
-
-I'm a footer!
-""".strip()
-
-
-IMAGE_TXT = """
-<img src="assets/{{args[1]}}">
-""".strip()
-
-
-HTML_TXT = """
-
-""".strip()
 
 
 def create_project(root, project_name):
@@ -40,11 +11,11 @@ def create_project(root, project_name):
     structure = {
         project_name: {
             "assets": {"tiger.jpg": ""},
-            "content": {"article.txt": ARTICLE_TXT},
-            "data": {"config.txt": f"project_name: {project_name}\n"},
-            "layouts": {"footer.txt": FOOTER_TXT},
-            "macros": {"image.txt": IMAGE_TXT},
-            "targets": {"html.txt": HTML_TXT},
+            "content": {"first.txt": defaults.first_article},
+            "data": {"config.txt": defaults.config_file(project_name)},
+            "layouts": {"footer.txt": defaults.footer_layout},
+            "macros": {"image.txt": defaults.image_macro},
+            "targets": {"html.txt": defaults.html_target},
         }
     }
 

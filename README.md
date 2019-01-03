@@ -24,6 +24,13 @@ For development, run `pip3 install -r requirements.txt`. This will install Zendo
 
 Use `precommit.sh` to reformat code and run the tests.
 
+## Dependencies
+
+Zendown is written in Python 3.7. It uses the following packages:
+
+- [jinja2](https://pypi.org/project/jinja2/)
+- [pypandoc](https://pypi.org/project/pypandoc/)
+
 ## License
 
 © 2018 Mitchell Kember

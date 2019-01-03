@@ -18,7 +18,7 @@ def command_list(args):
 
 def command_build(args):
     print(f"Building target {args.target}")
-    build_target(get_target_file(args.target))
+    build_target(args.target, args.article, args.language, args.target_args)
 
 
 def get_parser():
@@ -36,6 +36,18 @@ def get_parser():
 
     parser_build = subparsers.add_parser("build", help="build the project")
     parser_build.add_argument("target", help="target to build")
+    parser_build.add_argument(
+        "-a", "--article", help="article to build (default: all)"
+    )
+    parser_build.add_argument(
+        "-l", "--language", default="en", help="language to use (default: en)"
+    )
+    parser_build.add_argument(
+        "target_args",
+        metavar="ARG",
+        nargs="*",
+        help="target-specific arguments",
+    )
 
     return parser
 
