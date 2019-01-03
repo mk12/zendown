@@ -1,42 +1,24 @@
 """Command-line interface for Zendown."""
 
 import argparse
-import os
-import os.path
 
-
-STRUCTURE = {
-    "assets": {},
-    "content": {"hello.txt": "Hello, world!"},
-    "data": {},
-    "layouts": {},
-    "macros": {},
-    "targets": {},
-}
+from zendown.files import create_project, get_target_file, get_target_names
+from zendown.build import build_target
 
 
 def command_new(args):
-    def create(root, structure):
-        for key, val in structure.items():
-            path = os.path.join(root, key)
-            if isinstance(val, dict):
-                os.mkdir(path)
-                create(path, val)
-            else:
-                assert isinstance(val, str)
-                with open(path, "w") as f:
-                    f.write(val)
-
     print(f"Creating a new Zendown project in {args.name}/")
-    create(os.getcwd(), {args.name: STRUCTURE})
+    create_project(".", args.name)
 
 
 def command_list(args):
-    print("list")
+    print("The following targets are available:\n")
+    print("\n".join(get_target_names()))
 
 
 def command_build(args):
-    print("builda")
+    print(f"Building target {args.target}")
+    build_target(get_target_file(args.target))
 
 
 def get_parser():
