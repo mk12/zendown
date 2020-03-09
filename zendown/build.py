@@ -3,7 +3,9 @@
 import os
 import os.path
 
-from zendown.files import get_target_file
+# from zendown.files import get_target_file
+
+targets = ["docx", "html", "latex"]
 
 # generic path utility
 # cat/sec/art#id

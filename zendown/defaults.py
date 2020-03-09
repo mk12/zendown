@@ -3,12 +3,25 @@
 from textwrap import dedent
 
 
+def structure(name):
+    """Default project structure."""
+    return {
+        name: {
+            "assets": {"tiger.jpg": ""},
+            "content": {"first.txt": first_article},
+            "data": {"config.yml": f"project_name: {name}"},
+            "templates": {"footer.txt": footer_template},
+            "macros": {"image.txt": image_macro},
+        }
+    }
+
+
 first_article = dedent(
     """\
+    ---
     extends: layouts/footer
     title: My first article
     targets: html
-
     ---
 
     This is my first article in {{project_name}}!
@@ -18,11 +31,11 @@ first_article = dedent(
 )
 
 
-footer_layout = dedent(
+footer_template = dedent(
     """\
     ---
 
-    {{body}}
+    [[body]]
 
     ***
 
@@ -33,17 +46,6 @@ footer_layout = dedent(
 
 image_macro = dedent(
     """\
-    <img src="assets/{{args[1]}}">
+    <img src="assets/{{arg1}}">
 """
 )
-
-
-html_target = dedent(
-    """\
-
-"""
-)
-
-
-def config_file(project_name):
-    return f"project_name: {project_name}\n"

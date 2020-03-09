@@ -8,16 +8,6 @@ from zendown.utils import fatal_error
 
 def create_project(root, project_name):
     """Create the default project files and directories in root."""
-    structure = {
-        project_name: {
-            "assets": {"tiger.jpg": ""},
-            "content": {"first.txt": defaults.first_article},
-            "data": {"config.txt": defaults.config_file(project_name)},
-            "layouts": {"footer.txt": defaults.footer_layout},
-            "macros": {"image.txt": defaults.image_macro},
-            "targets": {"html.txt": defaults.html_target},
-        }
-    }
 
     def create(root, structure):
         for key, val in structure.items():
@@ -30,7 +20,10 @@ def create_project(root, project_name):
                 with open(path, "w") as f:
                     f.write(val)
 
-    create(root, structure)
+    try:
+        create(root, defaults.structure(project_name))
+    except FileExistsError as ex:
+        fatal_error(f"'{ex.filename}' already exists")
 
 
 def _get_dir(*items):
@@ -57,16 +50,18 @@ def is_text(path):
     return path.endswith(".txt")
 
 
-def get_target_file(name):
-    return _get_file("targets", f"{name}.txt")
+# def get_target_file(name):
+#     return _get_file("targets", f"{name}.txt")
 
 
-def get_target_files():
-    files = [f for f in os.listdir(_get_dir("targets")) if is_text(f)]
-    files.sort()
-    return files
+# def get_target_files():
+#     files = [f for f in os.listdir(_get_dir("targets")) if is_text(f)]
+#     files.sort()
+#     return files
 
 
-def get_target_names():
-    files = get_target_files()
-    return [os.path.splitext(os.path.basename(f))[0] for f in files]
+# def get_target_names():
+#     files = get_target_files()
+#     return [os.path.splitext(os.path.basename(f))[0] for f in files]
+
+# TODO: get file(s) for lang, target
