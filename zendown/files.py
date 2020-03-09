@@ -29,9 +29,7 @@ def create_project(root, project_name):
 def _get_dir(*items):
     path = os.path.join(*items)
     if not os.path.exists(path):
-        fatal_error(
-            f"directory '{path}' not found (are you in a Zendown project?)"
-        )
+        fatal_error(f"directory '{path}' not found (are you in a Zendown project?)")
     if not os.path.isdir(path):
         fatal_error(f"'{path}' is not a directory")
     return path

@@ -27,10 +27,7 @@ def command_list(args):
 def command_build(args):
     print(f"Building target {args.target}")
     build_target(
-        args.target,
-        article=args.article,
-        language=args.language,
-        args=args.target_args,
+        args.target, article=args.article, language=args.language, args=args.target_args
     )
 
 
@@ -39,13 +36,9 @@ def get_parser():
     parser = argparse.ArgumentParser(
         prog="zendown", description="tool for building Zendown projects"
     )
-    commands = parser.add_subparsers(
-        metavar="command", dest="command", required=True
-    )
+    commands = parser.add_subparsers(metavar="command", dest="command", required=True)
 
-    parser_help = commands.add_parser(
-        "help", help="show this help message and exit"
-    )
+    parser_help = commands.add_parser("help", help="show this help message and exit")
     parser_help.add_argument(
         metavar="command",
         dest="help_target",
@@ -71,17 +64,12 @@ def get_parser():
 
     parser_build = commands.add_parser("build", help="build the project")
     parser_build.add_argument("target", help="target to build")
-    parser_build.add_argument(
-        "-a", "--article", help="article to build (default: all)"
-    )
+    parser_build.add_argument("-a", "--article", help="article to build (default: all)")
     parser_build.add_argument(
         "-l", "--language", default="en", help="language to use (default: en)"
     )
     parser_build.add_argument(
-        "target_args",
-        metavar="arg",
-        nargs="*",
-        help="target-specific arguments",
+        "target_args", metavar="arg", nargs="*", help="target-specific arguments"
     )
 
     return parser, commands.choices

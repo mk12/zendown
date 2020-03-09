@@ -1,6 +1,6 @@
 # Zendown
 
-Zendown is a system for writing documentation, built for technical writers. Here are its main features:
+Zendown is a system for writing documentation, built for technical writers.
 
 - **Simple structure**: Articles are files. Sections are directories.
 - **Separation of content and presentation**: When you're writing, focus on the content. When you're styling, focus on presentation.
@@ -12,32 +12,17 @@ Zendown is a system for writing documentation, built for technical writers. Here
 [pandoc]: https://pandoc.org/MANUAL.html#pandocs-markdown
 [jinja2]: http://jinja.pocoo.org
 
-## Install
+## Quick start
 
-Clone the repository and run `pip3 install .` to install Zendown on your system.
+Clone the repository and run `make install`. You'll need Python 3 for this to work.
 
-## Usage
+TODO: Basic quickstart using zendown.
 
-Zendown has three main commands:
+## Contributing
 
-- `zendown new NAME`: Create a new Zendown project with the given name.
-- `zendown list THING`: List articles, languages, build targets, and more.
-- `zendown build TARGET`: Build the given target for the current project.
+For development, run `make dev`. This will download all dependencies and install Zendown in editable mode.
 
-Run `zendown -h` for more details.
-
-## Development
-
-For development, run `pip3 install -r requirements.txt`. This will download the dependencies and install Zendown in editable mode.
-
-Use `precommit.sh` to format code and run tests.
-
-## Dependencies
-
-Zendown is written in Python 3.7. It uses the following packages:
-
-- [jinja2](https://pypi.org/project/jinja2/)
-- [pypandoc](https://pypi.org/project/pypandoc/)
+Run `make help` to see other targets, such as formatting and testing.
 
 ## License
 
