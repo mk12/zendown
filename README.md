@@ -16,7 +16,7 @@ Zendown is a system for writing documentation, built for technical writers.
 
 Clone the repository and run `make install`. You'll need Python 3 for this to work.
 
-TODO: Basic quickstart using zendown.
+**TODO: Basic quickstart using zendown.**
 
 ## Contributing
 

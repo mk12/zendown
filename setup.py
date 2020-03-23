@@ -8,5 +8,5 @@ setup(
     license="MIT",
     packages=["zendown"],
     install_requires=["Jinja2>=2,<3", "PyYAML>=3,<4", "pypandoc>=1,<2"],
-    entry_points={"console_scripts": ["zendown = zendown.cli:main"]},
+    entry_points={"console_scripts": ["zd = zendown.cli:main"]},
 )

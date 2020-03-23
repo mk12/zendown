@@ -1,51 +1,70 @@
 """Default files for a Zendown project."""
 
-from textwrap import dedent
+from zendown import config
 
 
 def structure(name):
     """Default project structure."""
     return {
         name: {
+            ".gitignore": gitignore,
+            "zendown.yml": f"project_name: {name}",
             "assets": {"tiger.jpg": ""},
-            "content": {"first.txt": first_article},
-            "data": {"config.yml": f"project_name: {name}"},
-            "templates": {"footer.txt": footer_template},
+            "articles": {"first.txt": first_article},
+            "templates": {"page.txt": page_template},
             "macros": {"image.txt": image_macro},
+            "targets": {"html.yml": "extends: builtin_html"},
         }
     }
 
 
-first_article = dedent(
-    """\
-    ---
-    extends: layouts/footer
-    title: My first article
-    targets: html
-    ---
+gitignore = """\
+# Zendown specific
+/out/
 
-    This is my first article in {{project_name}}!
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+ehthumbs.db
+Thumbs.db
 
-    {{image tiger.jpg}}
+# Editors
+.vscode/
+
+# Artifacts
+*.pyo
+*.pyc
+__pycache__
 """
-)
 
 
-footer_template = dedent(
-    """\
-    ---
+first_article = """\
+extends: templates/page
+title: My first article
 
-    [[body]]
+---
 
-    ***
+This is my first article in {{config.project_name}}!
 
-    I'm a footer!
+{{image tiger.jpg}}
 """
-)
 
 
-image_macro = dedent(
-    """\
-    <img src="assets/{{arg1}}">
+page_template = """\
+---
+
+[[body]]
+
+***
+
+I'm a footer!
 """
-)
+
+
+image_macro = """\
+<img src="assets/{{arg1}}">
+"""
