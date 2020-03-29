@@ -1,4 +1,6 @@
 black
+mypy
+pylint>=2,<3
 pytest>=4,<5
 
 -e .

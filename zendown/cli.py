@@ -1,15 +1,15 @@
-"""Command-line interface for Zendown."""
+"""Command-line interface."""
 
 import argparse
 from pathlib import Path
+import sys
 
+from zendown.build import BuildError, Options, builders
 from zendown.files import create_project
-from zendown.project import Project, Kind
-from zendown.utils import fatal_error
+from zendown.project import Project
 
 
 def main():
-    """Entry point of the program."""
     parser, commands = get_parser()
     args = parser.parse_args()
     if args.command == "help":
@@ -24,7 +24,6 @@ def main():
 
 
 def get_parser():
-    """Create the command-line argument parser."""
     parser = argparse.ArgumentParser(
         prog="zendown", description="tool for building Zendown projects"
     )
@@ -38,57 +37,51 @@ def get_parser():
         help="get help for a specific command",
     )
 
-    parser_init = commands.add_parser("init", help="create a new project")
-    parser_init.add_argument("name", help="project name")
+    parser_new = commands.add_parser("new", help="create a new project")
+    parser_new.add_argument("name", help="project name")
 
     parser_list = commands.add_parser("list", help="list project items")
-    list_args = parser_list.add_mutually_exclusive_group()
-    for short, long in [
-        ("a", "articles"),
-        ("e", "templates"),
-        ("t", "targets"),
-        ("m", "macros"),
-        ("s", "assets"),
-    ]:
-        list_args.add_argument(
-            f"-{short}", f"--{long}", action="store_true", help=f"list {long}"
-        )
-    list_args.add_argument(
-        "query", metavar="arg", nargs="?", default="", help="query to filter listing"
+    parser_list.add_argument(
+        "-f", "--files", action="store_true", help="show file paths instead of refs"
+    )
+    parser_list.add_argument(
+        "query", nargs="?", default="", help="filter articles by ref",
     )
 
     parser_build = commands.add_parser("build", help="build the project")
-    parser_build.add_argument("target", help="target to build")
-    parser_build.add_argument("-a", "--article", help="article query")
     parser_build.add_argument(
-        "target_args", metavar="arg", nargs="*", help="target-specific arguments"
+        "-i",
+        "--ignore-errors",
+        action="store_true",
+        help="keep going if there are errors",
+    )
+    parser_build.add_argument("builder", choices=builders.keys(), help="build target")
+    parser_build.add_argument(
+        "query", nargs="?", default="", help="filter articles by ref",
     )
 
     return parser, commands.choices
 
 
-def command_init(args):
+def command_new(args):
     print(f"Creating a new Zendown project in {args.name}/")
     create_project(Path.cwd(), args.name)
 
 
 def command_list(args):
-    proj = Project.find()
-    if args.articles:
-        kind = Kind.ARTICLE
-    elif args.templates:
-        kind = Kind.TEMPLATE
-    elif args.targets:
-        kind = Kind.TARGET
-    elif args.macros:
-        kind = Kind.MACRO
-    elif args.assets:
-        kind = Kind.ASSET
-    else:
-        fatal_error("must specify something to list")
-    nodes = proj.query(kind, args.query)
-    print("\n".join(str(n.ref) for n in nodes))
+    project = Project.find()
+    for article in project.query(args.query):
+        print(article.path if args.files else article.node.ref)
 
 
 def command_build(args):
-    print(f"Building target {args.target}")
+    project = Project.find()
+    builder = builders[args.builder](project)
+    articles = project.query(args.query)
+    options = Options(ignore_errors=args.ignore_errors)
+    try:
+        builder.build(articles, options)
+    except BuildError as ex:
+        # ANSI escape code for red, bold text.
+        print(f"\x1b[31;1mERROR:\x1b[0m {ex}")
+        sys.exit(1)

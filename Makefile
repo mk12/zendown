@@ -1,4 +1,9 @@
-.PHONY: help dev test fmt install clean
+PY := python3
+PIP := pip3
+
+PKG := zendown
+
+.PHONY: help dev test tc lint fmt install clean
 
 help:
 	@echo "Targets:"
@@ -6,22 +11,31 @@ help:
 	@echo "install  install zendown"
 	@echo "dev      install in dev mode"
 	@echo "test     run tests"
+	@echo "tc       run typechecker"
+	@echo "lint     run linter"
 	@echo "fmt      format code"
 	@echo "clean    clean output directories"
 
 install:
-	pip3 install .
+	$(PIP) install .
 
 dev:
-	pip3 install -r requirements-dev.txt
+	$(PIP) install -r requirements-dev.txt
 
 test:
-	python3 -m pytest
+	$(PY) -m pytest
+
+tc:
+	$(PY) -m mypy $(PKG)
+
+lint:
+	$(PY) -m pylint $(PKG)
 
 fmt:
-	python3 -m black .
+	$(PY) -m black .
 
 clean:
-	rm -rf zendown.egg-info
-	rm -rf __pycache__
+	rm -rf $(PKG).egg-info
 	rm -rf .pytest_cache
+	rm -rf $(PKG)/__pycache__
+	rm -rf $(PKG)/*.pyc
