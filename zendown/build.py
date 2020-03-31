@@ -55,13 +55,18 @@ class Html(Builder):
 
     name = "html"
 
+    def article_path(self, article: Article) -> str:
+        pass
+
     def resolve_article(self, ctx: Context, article: Article) -> str:
         return ""
 
     def resolve_asset(self, ctx: Context, rel_path: str) -> str:
         path = "assets/" + rel_path
         if not self.project.fs.join(path).exists():
-            raise BuildError(f"asset {path} referenced in {ctx.article.path} does not exist")
+            raise BuildError(
+                f"asset {path} referenced in {ctx.article.path} does not exist"
+            )
         ref = ctx.article.node.ref
         assert ref
         to_root = "../" * (1 + len(ref.parts))
@@ -70,8 +75,12 @@ class Html(Builder):
     def build(self, articles: Iterator[Article]):
         for article in articles:
             ctx = self.context(article)
-            html = article.render_html(ctx)
-            # TODO: pandoc step.
+            article.ensure_loaded()
+            print(article.render_html(ctx))
+            # TODO: pandoc step. add title, etc.
+            # TODO: do builders need to have additional input, e.g. css
+            # support/{html,hubspot}/style.cc etc.
+            # another FileSystem object
             # ACTUALLY need to do recursive thing on tree,
             # just iterating articles won't create dirs and indexes.
 

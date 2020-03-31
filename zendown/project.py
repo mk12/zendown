@@ -3,14 +3,12 @@
 import importlib.util
 import os
 from pathlib import Path
-from types import ModuleType
-from typing import Dict, Optional, Iterator, Union, cast
+from typing import Dict, Optional, Iterator, Union
 
 from zendown.article import Article
-from zendown import macros
 from zendown.config import ProjectConfig
 from zendown.files import FileSystem
-from zendown.tree import COLLISION, Collision, Label, Node, Ref
+from zendown.tree import Collision, Label, Node, Ref
 from zendown.zfm import Macro
 
 
@@ -20,9 +18,9 @@ class Project:
         self.cfg = cfg
         self.name = cfg["project_name"]
         self.tree: Node[Article] = Node.root()
-        self.articles_by_ref: Dict[Ref, Article] = {}
-        self.articles_by_label: Dict[Label, Union[Article, Collision]] = {}
-        self.macros: Optional[ModuleType] = None
+        self.articles_by_ref: Dict[Ref[Article], Article] = {}
+        self.articles_by_label: Dict[Label[Article], Union[Article, Collision]] = {}
+        self.macros: Optional[Dict[str, Macro]] = None
         self.load_macros()
         self.scan_articles()
 
@@ -38,17 +36,15 @@ class Project:
         f = self.fs.join("macros.py")
         if f.exists() and f.is_file():
             spec = importlib.util.spec_from_file_location("macros", f)
-            self.macros = importlib.util.module_from_spec(spec)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            self.macros = getattr(module, "_macros", None)
 
     def get_macro(self, name: str) -> Optional[Macro]:
         """Get the macro function with the given name."""
-        if not name:
-            name = cast(str, self.cfg.get("default_macro"))
         if self.macros:
-            macro = getattr(self.macros, name, None)
-            if macro:
-                return macro
-        return getattr(macros, name, None)
+            return self.macros.get(name)
+        return None
 
     def scan_articles(self):
         """Locate all the articles in the project and populate the tree."""
@@ -72,13 +68,8 @@ class Project:
                         node = child
                 node.set_item(Article(file_path, node))
         self.tree.set_refs_recursively()
-        for article in self.tree.all_items_recursively():
-            self.articles_by_ref[article.node.ref] = article
-            label = article.node.label
-            if label in self.articles_by_label:
-                self.articles_by_label[label] = COLLISION
-            else:
-                self.articles_by_label[label] = article
+        self.articles_by_ref = self.tree.items_by_ref()
+        self.articles_by_label = self.tree.items_by_ref()
 
     def query(self, substr: str) -> Iterator[Article]:
         """Iterate over articles whose refs have the given substring."""

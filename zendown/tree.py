@@ -1,33 +1,52 @@
 """Tree structure for articles."""
 
-from typing import Dict, Generic, Iterator, Optional, Tuple, TypeVar
+from typing import Any, Dict, Generic, Iterator, Optional, Tuple, TypeVar, Union
 
 
-class Label:
+T = TypeVar("T")
+
+
+class Label(Generic[T]):
 
     """A label for a node in a tree."""
 
     def __init__(self, val: str):
         self.val = val
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return self.val
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Label):
+            return NotImplemented
+        return self.val == other.val
 
-class Ref:
+    def __hash__(self) -> int:
+        return hash(self.val)
+
+
+class Ref(Generic[T]):
 
     """A list of labels identifying a node in a tree."""
 
-    def __init__(self, parts: Tuple[Label, ...]):
+    def __init__(self, parts: Tuple[Label[T], ...]):
         self.parts = parts
 
     @staticmethod
-    def parse(s: str) -> "Ref":
+    def parse(s: str) -> "Ref[T]":
         assert len(s) >= 1 and s[0] == "/"
         return Ref(tuple(Label(p) for p in s[1:].split("/")))
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return "/" + "/".join(str(label) for label in self.parts)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Ref):
+            return NotImplemented
+        return self.parts == other.parts
+
+    def __hash__(self) -> int:
+        return hash(self.parts)
 
 
 class Collision:
@@ -36,45 +55,34 @@ class Collision:
 
 COLLISION = Collision()
 
-ROOT = Label("$root")
-
-T = TypeVar("T")
+ROOT: Label[Any] = Label("$root")
 
 
 class Node(Generic[T]):
 
     """A node in a tree.
 
-    There are two kinds of nodes: items and dirs. Items have the item property
-    set, and do not have children. Dirs do not have the item property set, and
-    they may (but do not need to) have children.
+    Each node can optionally have an item of type T associated with it. Nodes
+    can have any number of children.
     """
 
-    def __init__(self, label: Label):
+    def __init__(self, label: Label[T]):
         self.label = label
-        self.parent: Optional[Node] = None
-        self.ref: Optional[Ref] = None
+        self.parent: Optional[Node[T]] = None
+        self.ref: Optional[Ref[T]] = None
         self.item: Optional[T] = None
-        self.children: Dict[Label, Node] = {}
+        self.children: Dict[Label[T], Node[T]] = {}
 
     @staticmethod
     def root():
         return Node(ROOT)
 
     def set_item(self, item: T):
-        assert not self.children
         self.item = item
 
-    def add_child(self, child: "Node"):
-        assert not self.item
+    def add_child(self, child: "Node[T]"):
         self.children[child.label] = child
         child.parent = self
-
-    def is_item(self) -> bool:
-        return bool(self.item)
-
-    def is_dir(self) -> bool:
-        return not self.is_item()
 
     def is_root(self) -> bool:
         return self.label is ROOT
@@ -82,7 +90,7 @@ class Node(Generic[T]):
     def set_refs_recursively(self):
         assert self.is_root()
 
-        def go(node: Node):
+        def go(node: Node[T]):
             for label, child in node.children.items():
                 assert node.ref is not None
                 child.ref = Ref(node.ref.parts + (label,))
@@ -91,20 +99,25 @@ class Node(Generic[T]):
         self.ref = Ref(())
         go(self)
 
-    def items(self) -> Iterator[T]:
-        assert self.is_dir()
-        for node in self.children.values():
-            if node.item:
-                yield node.item
-
-    def dirs(self) -> Iterator["Node"]:
-        assert self.is_dir()
-        for node in self.children.values():
-            if not node.item:
-                yield node
-
-    def all_items_recursively(self) -> Iterator[T]:
-        if self.item:
-            yield self.item
+    def traverse_nodes(self) -> Iterator["Node[T]"]:
+        yield self
         for child in self.children.values():
-            yield from child.all_items_recursively()
+            yield from child.traverse_nodes()
+
+    def items_by_ref(self) -> Dict[Ref[T], T]:
+        items = {}
+        for node in self.traverse_nodes():
+            if node.item is not None:
+                assert node.ref
+                items[node.ref] = node.item
+        return items
+
+    def items_by_label(self) -> Dict[Label[T], Union[T, Collision]]:
+        items: Dict[Label[T], Union[T, Collision]] = {}
+        for node in self.traverse_nodes():
+            if node.item is not None:
+                if node.label in items:
+                    items[node.label] = COLLISION
+                else:
+                    items[node.label] = node.item
+        return items

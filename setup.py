@@ -7,6 +7,7 @@ setup(
     description="Tool for writing structured documentation",
     license="MIT",
     packages=["zendown"],
-    install_requires=["PyYAML>=3,<4", "mistletoe<2"],
+    python_requires=">=3.7",
+    install_requires=["PyYAML>=4.2b1", "mistletoe<2", "python-slugify>=4,<5"],
     entry_points={"console_scripts": ["zd = zendown.cli:main"]},
 )

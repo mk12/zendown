@@ -76,11 +76,11 @@ def command_list(args):
 
 def command_build(args):
     project = Project.find()
-    builder = builders[args.builder](project)
-    articles = project.query(args.query)
     options = Options(ignore_errors=args.ignore_errors)
+    builder = builders[args.builder](project, options)
+    articles = project.query(args.query)
     try:
-        builder.build(articles, options)
+        builder.build(articles)
     except BuildError as ex:
         # ANSI escape code for red, bold text.
         print(f"\x1b[31;1mERROR:\x1b[0m {ex}")

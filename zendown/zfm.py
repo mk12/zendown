@@ -1,13 +1,16 @@
 """Zendown flavored Markdown. It extends Markdown with macros."""
 
+import inspect
 import re
-from typing import Any, Callable, List, Optional, Union, cast
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
 
-from mistletoe.block_token import BlockToken, Quote, tokenize
+from mistletoe.block_token import BlockToken, Heading, Quote, tokenize
 from mistletoe.span_token import Link, Image, InlineCode, SpanToken, RawText
 from mistletoe.html_renderer import HTMLRenderer
 
+from zendown.tokens import Token, walk
 from zendown.tree import COLLISION, Label, Ref
+from zendown.utils import smartify
 
 # Only import these for mypy.
 if False:  # pylint: disable=using-constant-test
@@ -17,7 +20,26 @@ if False:  # pylint: disable=using-constant-test
     from zendown.project import Project
 
 
-Token = Union[SpanToken, BlockToken]
+def postprocess_heading(heading: Heading, make_slug: Callable[[str], str]):
+    """Perform extra ZFM tokenizing on a heading block."""
+    if heading.children:
+        last = heading.children[-1]
+        if isinstance(last, RawText):
+            match = re.search(r" #{([^ }]+)}(?:$|\n)", last.content)
+            if match:
+                last.content = last.content[: match.start()]
+                heading.identifier = match.group(1)
+                return
+
+    text = ""
+
+    def collect_text(token: Token):
+        if isinstance(token, RawText):
+            nonlocal text
+            text += token.content
+
+    walk(heading.children, collect_text)
+    heading.identifier = make_slug(text)
 
 
 class Context:
@@ -39,9 +61,83 @@ class Context:
         return "".join(self.renderer.render(c) for c in token)
 
 
-# A macro takes a Context, argument string (between braces), and possibly a list
-# of children (inside the blockquote following the colon).
-Macro = Callable[[Context, str, List[BlockToken]], str]
+# Allowed type signatures for macro functions.
+MacroFunction = Union[
+    Callable[[Context], str],
+    Callable[[Context, str], str],
+    Callable[[Context, List[BlockToken]], str],
+    Callable[[Context, str, List[BlockToken]], str],
+]
+
+
+class MacroError(Exception):
+    """An error that occurs during macro execution."""
+
+
+class Macro:
+
+    """ZFM macro.
+
+    A macro is defined by a function that takes the following arguments:
+
+        ctx: Context
+            Required. The rendering context.
+
+        arg: str
+            Optional. The untokenized argument provided between braces. For
+            example, @icon{gear} would has the arg "gear". Macros can choose to
+            tokenize using zendown.tokens.tokenize if they wish.
+
+            If the macro does not take this parameter, it is an error to provide
+            an argument when invoking the macro in an article.
+
+        children: List[BlockItem]
+            Optional. The tokenized children provided in the blockquote
+            following the colon. For example:
+
+                @tip:
+                > _This_ paragraph is `children[0]`.
+
+            If the macro does not take this parameter, it is an error to provide
+            a blockquote when invoking the macro in an article.
+
+    The function must return a string of rendered HTML.
+    """
+
+    def __init__(self, function: MacroFunction):
+        self.name = function.__name__
+        self.function: Callable[..., str] = function
+        parameters = inspect.signature(function).parameters
+        self.requires_arg = "arg" in parameters
+        self.requires_children = "children" in parameters
+
+    def __call__(self, ctx: Context, arg: str, children: List[BlockToken]) -> str:
+        arguments: Dict[str, Any] = {"ctx": ctx}
+        if self.requires_arg:
+            arguments["arg"] = arg
+        elif arg:
+            raise MacroError("macro does not take argument")
+        if self.requires_children:
+            arguments["children"] = children
+        elif children:
+            raise MacroError("macro does not take blockquote")
+        return self.function(**arguments)
+
+
+MT = TypeVar("MT", bound=MacroFunction)
+
+
+def macro(f: MT) -> MT:
+    """Mark a function as a macro.
+
+    This doesn't change the function itself. It just injects a entry into the
+    global _macros dictionary.
+    """
+    scope = getattr(f, "__globals__")
+    if not "_macros" in scope:
+        scope["_macros"] = {}
+    scope["_macros"][f.__name__] = Macro(f)
+    return f
 
 
 class InlineMacro(SpanToken):
@@ -96,22 +192,33 @@ class ZFMRenderer(HTMLRenderer):
         super().__init__(InlineMacro, BlockMacro)
         ctx.renderer = self
         self.ctx = ctx
-        self.inline_code_macro = ctx.project.cfg.get("inline_code_macro")
+        self.inline_code_macro = ctx.project.cfg["inline_code_macro"]
+        self.smart_typography = ctx.project.cfg["smart_typography"]
 
-    def error(self, kind: str, arg: str) -> str:
+    def error(self, kind: str, *info: str) -> str:
+        info_str = ": ".join(info)
         if self.ctx.builder.options.ignore_errors:
-            return f"�{kind.upper()}: {arg}�"
-        raise RenderError(f"{kind}: {arg}")
+            return f"💥{kind.upper()}: {info_str}💥"
+        raise RenderError(f"{kind}: {info_str}")
 
     def run_macro(self, name: str, arg: str, children: Any) -> str:
-        macro = self.ctx.project.get_macro(name)
-        if not macro:
+        macro_obj = self.ctx.project.get_macro(name)
+        if not macro_obj:
             return self.error("undefined macro", name)
-        return macro(self.ctx, arg, children)
+        try:
+            return macro_obj(self.ctx, arg, children)
+        except MacroError as ex:
+            return self.error("macro error", name, str(ex))
+
+    def render_heading(self, token):
+        template = '<h{level} id="{id}">{inner}</h{level}>'
+        inner = self.render_inner(token)
+        return template.format(level=token.level, id=token.identifier, inner=inner)
 
     def render_inline_code(self, token: InlineCode) -> str:
         if self.inline_code_macro:
-            return self.inline_code_macro(self.ctx, token.children[0].content, None)
+            text = token.children[0].content
+            return self.run_macro(self.inline_code_macro, text, None)
         return super().render_inline_code(token)
 
     def render_inline_macro(self, token: InlineMacro) -> str:
@@ -122,24 +229,36 @@ class ZFMRenderer(HTMLRenderer):
         assert isinstance(child, Quote)
         return self.run_macro(token.name, token.arg, child.children)
 
+    def render_raw_text(self, token: RawText) -> str:
+        if self.smart_typography:
+            token.content = smartify(token.content)
+        return super().render_raw_text(token)
+
     def render_link(self, token: Link) -> str:
+        # TODO: anchors handled in Ref parse (but also allow labelonly#anchor)
         if "." not in token.target:
+            path, anchor = token.target, ""
+            if "#" in path:
+                i = path.index("#")
+                path, anchor = path[:i], path[i:]
             article: Optional["Article"] = None
-            if token.target.startswith("/"):
-                ref = Ref.parse(token.target)
+            if path.startswith("/"):
+                ref: Ref["Article"] = Ref.parse(path)
                 article = self.ctx.project.articles_by_ref.get(ref)
-            elif "/" not in token.target:
-                label = Label(token.target)
+            elif "/" not in path:
+                label: Label["Article"] = Label(path)
                 maybe_article = self.ctx.project.articles_by_label.get(label)
                 if maybe_article is COLLISION:
-                    return self.error("ambiguous article", token.target)
+                    return self.error("ambiguous article", path)
                 article = cast(Optional["Article"], maybe_article)
             if article is not None:
-                token.target = self.ctx.builder.resolve_article(self.ctx, article)
+                url = self.ctx.builder.resolve_article(self.ctx, article)
+                token.target = url + anchor
                 if not token.children:
                     article.ensure_loaded()
                     assert article.cfg
                     token.children = [RawText(article.cfg["title"])]
+            # TODO: FAIL IF ARTICLE+ANCHOR DOESN'T EXIST, don't silently leave.
         return super().render_link(token)
 
     def render_image(self, token: Image) -> str:

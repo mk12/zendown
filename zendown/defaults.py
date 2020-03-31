@@ -2,14 +2,18 @@
 
 from base64 import b64decode
 
+from zendown import macros
+
 
 def structure(name):
     """Default project structure."""
+    with open(macros.__file__) as f:
+        macros_py = f.read()
     return {
         name: {
             ".gitignore": gitignore,
             "macros.py": macros_py,
-            "zendown.yml": f"project_name: {name}",
+            "zendown.yml": zendown_yml(name),
             "content": {"first.md": first_md},
             "assets": {"tiger.jpg": b64decode(tiger_jpg_base64)},
         }
@@ -40,6 +44,13 @@ __pycache__
 """
 
 
+zendown_yml = """\
+project_name: {0}
+inline_code_macro: upper
+smart_typography: true
+""".format
+
+
 first_md = """\
 title: My first article
 
@@ -47,26 +58,18 @@ title: My first article
 
 @toc
 
-# First section
+# Introduction
 
-Here's a [self-link](&first).
+Here's a [self-link](/first).
 
-@fun
-
-@img{tiger}
-
-# Second section
+![Photo of a tiger](tiger.jpg)
 
 @note:
-> This is a note.
+> Did you know tigers can weigh as much as 660 pounds?
 
-Isn't that neat?
-"""
+# Conclusion
 
-
-macros_py = """\
-def fun(project, article, block, *args):
-    return f"Fun macro defined in {project.name}!"
+@upper{Macros} are `fun`!
 """
 
 
