@@ -60,6 +60,19 @@ def walk(tokens: Union[Token, List[Token]], f: Callable[[Token], None]):
         go(tokens)
 
 
+def collect_text(token: Token) -> str:
+    """Returns all the raw text in the token concatenated together."""
+    text = ""
+
+    def go(token: Token):
+        if isinstance(token, RawText):
+            nonlocal text
+            text += token.content
+
+    walk(token, go)
+    return text
+
+
 def raw_text(text: str) -> RawText:
     """Create a RawText token."""
     return RawText(text)

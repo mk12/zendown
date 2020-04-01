@@ -9,7 +9,7 @@ from mistletoe.block_token import BlockToken, Heading, Quote, tokenize
 from mistletoe.span_token import Link, Image, InlineCode, SpanToken, RawText
 from mistletoe.html_renderer import HTMLRenderer
 
-from zendown.tokens import Token, walk
+from zendown.tokens import Token
 from zendown.tree import COLLISION, Label, Ref
 
 # Only import these for mypy.
@@ -20,26 +20,24 @@ if False:  # pylint: disable=using-constant-test
     from zendown.project import Project
 
 
-def postprocess_heading(heading: Heading, make_slug: Callable[[str], str]):
-    """Perform extra ZFM tokenizing on a heading block."""
+def postprocess_heading(heading: Heading):
+    """Perform extra ZFM tokenizing on a heading block.
+
+    In particular, this sets the identifier field. For example:
+
+        # Some heading {#some-id}
+
+    This heading would have an identifer of "some-id". If this syntax is not
+    present, the identifier will be None.
+    """
+    heading.identifier = None
     if heading.children:
         last = heading.children[-1]
         if isinstance(last, RawText):
-            match = re.search(r" #{([^ }]+)}(?:$|\n)", last.content)
+            match = re.search(r" {#([^ }]+)}(?:$|\n)", last.content)
             if match:
                 last.content = last.content[: match.start()]
                 heading.identifier = match.group(1)
-                return
-
-    text = ""
-
-    def collect_text(token: Token):
-        if isinstance(token, RawText):
-            nonlocal text
-            text += token.content
-
-    walk(heading.children, collect_text)
-    heading.identifier = make_slug(text)
 
 
 def smartify(text: str) -> str:
@@ -197,6 +195,7 @@ class BlockMacro(BlockToken):
 
 class RenderError(Exception):
     """An error that occurs during rendering."""
+
     # TODO consider removing
 
 

@@ -60,7 +60,7 @@ class FileSystem:
                 relative = Path(os.path.relpath(path, Path.cwd()))
                 return FileSystem(relative)
             if path == path.parent:
-                fatal("not in a Zendown project")
+                fatal("not in a zendown project")
             path = path.parent
 
     def join(self, path: Union[str, Path]) -> Path:

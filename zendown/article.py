@@ -2,24 +2,28 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, cast
+from typing import Any, Dict, List, Mapping, Optional
 
 from mistletoe.block_token import BlockToken, Document, Heading
 from slugify import slugify
 
 from zendown.config import Config
+from zendown.tokens import collect_text
 from zendown.tree import Label, Node
 from zendown.zfm import Context, ZFMRenderer, postprocess_heading
 
 
 class ArticleConfig(Config):
 
+    """Article configuration header."""
+
     required = {
         "title": "Untitled Article",
-        "slug": None,
     }
 
-    optional: Dict[str, Any] = {}
+    optional = {
+        "slug": None,  # default set in Article.load
+    }
 
 
 class Section:
@@ -38,7 +42,7 @@ class Section:
 
 
 # Sections form a tree, but we refer to them by Label rather than Ref because
-# they must have unique labels (since they are used for HTML id attribute).
+# they must have unique labels (since they are used for the HTML id attribute).
 Anchor = Label[Section]
 
 
@@ -48,7 +52,23 @@ class ParseError(Exception):
 
 class Article:
 
-    """An article written in ZFM with a YAML configuration header."""
+    """An article written in ZFM with a YAML configuration header.
+
+    An article can be in one of three states:
+
+    1. Initialized: Only self.path and self.node are set.
+    2. Loaded: The file at self.path has been read, and split into the parsed
+       configuration (self.cfg) and the raw body (self.raw).
+    3. Parsed: The body has been tokenized (self._doc) and section tree has been
+       created (self._tree, self._anchors).
+
+    Loading must be done explicitly by calling load() or ensure_loaded(). Once
+    loaded, the other properties (self.doc, self.tree, self.anchors) will
+    automatically perform parsing if it has not been done yet.
+
+    Rendering to HTML can be considered a final step after parsing, but the
+    rendered results are not stored in the object.
+    """
 
     def __init__(self, path: Path, node: Node["Article"]):
         """Create a new article at the given filesystem path and tree node."""
@@ -86,8 +106,9 @@ class Article:
                     break
                 head += line
             body = f.read()
+        default_slug = slugify(self.path.with_suffix("").name)
         self.cfg = ArticleConfig.loads(self.path, head)
-        self.cfg.validate(slug=slugify(self.path.with_suffix("").name))
+        self.cfg.validate(slug=default_slug)
         logging.debug("article %r config: %r", self.node.ref, self.cfg)
         self.raw = body
         self._doc = None
@@ -105,31 +126,46 @@ class Article:
         on demand when properties are accessed.
         """
         assert self.is_loaded()
-        logging.debug("parsing article %r", self.node.ref)
+        logging.info("parsing article %r", self.node.ref)
         self._doc = Document(self.raw)
         self._tree = Node.root()
+        self._anchors = {}
         parent = self._tree
         blocks = []
         prev = None
         for token in self.doc.children:
-            if isinstance(token, Heading):
-                if prev:
-                    prev.item.blocks = blocks
-                blocks = []
-                postprocess_heading(token, slugify)
-                # TODO: handle conflicts
-                node = Node(Label(token.identifier))
-                section = Section(node, token)
-                node.set_item(section)
-                if prev and token.level > prev.item.heading.level:
-                    parent = prev
-                else:
-                    while parent.item and token.level <= parent.item.heading.level:
-                        parent = parent.parent
-                parent.add_child(node)
-                prev = node
-            else:
+            if not isinstance(token, Heading):
                 blocks.append(token)
+                continue
+            if prev:
+                prev.item.blocks = blocks
+            blocks = []
+            postprocess_heading(token)
+            if token.identifier:
+                original_id = token.identifier
+                if Label(original_id) in self.anchors:
+                    logging.error("%s: duplicate heading ID %r", self.path, original_id)
+            else:
+                original_id = slugify(collect_text(token))
+            i = 1
+            unique_id = original_id
+            while Label(unique_id) in self._anchors:
+                unique_id = f"{original_id}-{i}"
+                i += 1
+            # Set token.identifier since it will be rendered to the HTML id.
+            token.identifier = unique_id
+            label = Label(unique_id)
+            node = Node(label)
+            section = Section(node, token)
+            node.set_item(section)
+            self._anchors[label] = section
+            if prev and token.level > prev.item.heading.level:
+                parent = prev
+            else:
+                while parent.item and token.level <= parent.item.heading.level:
+                    parent = parent.parent
+            parent.add_child(node)
+            prev = node
         if prev:
             prev.item.blocks = blocks
 
@@ -142,8 +178,6 @@ class Article:
         for node in self._tree.children.values():
             extend_blocks(node)
         self._tree.set_refs_recursively()
-        anchors = self._tree.items_by_label()
-        self._anchors = cast(Dict[Label[Section], Section], anchors)
 
     @property
     def doc(self) -> Document:
