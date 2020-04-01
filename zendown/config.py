@@ -1,87 +1,75 @@
 """Configuration file parser."""
 
-from abc import ABC
+from abc import ABC, abstractproperty
 from io import StringIO
+import logging
 from pathlib import Path
-from typing import Any, Dict, Set, TextIO, Type, TypeVar
+from typing import Any, Dict, TextIO, Type, TypeVar
 
 import yaml
 
-from zendown.utils import fatal_error
 
 T = TypeVar("T", bound="Config")
 
 
 class Config(ABC):
 
-    """YAML configuration."""
-
-    REQUIRED: Set[str] = set()
-    OPTIONAL: Dict[str, Any] = {}
+    """Abstract base class for YAML configuration."""
 
     def __init__(self, path: Path, data: Dict[str, Any]):
         self.path = path
         self.data = data
-        self.validate()
 
-    def validate(self):
-        for key in self.REQUIRED:
+    def __repr__(self) -> str:
+        name = self.__class__.__name__
+        return f"{name}(path={self.path!r}, data={self.data!r})"
+
+    @abstractproperty
+    def required(self) -> Dict[str, Any]:
+        """Required configuration keys and their defaults."""
+
+    @abstractproperty
+    def optional(self) -> Dict[str, Any]:
+        """Optional configuration keys and their defaults."""
+
+    def validate(self, **defaults: Any):
+        """Validate the loaded configuration.
+
+        This must be called manually after creating an instance.
+
+        Extra defaults can be passed for keys whose default is dynamically
+        determined. They will override the defaults from the required and
+        optional properties.
+        """
+        for key in self.required:
             if key not in self.data:
-                fatal_error(f"{self.path}: missing '{key}'")
+                logging.error("%s: missing %r", self.path, key)
         for key in self.data:
-            if key not in self.REQUIRED and key not in self.OPTIONAL:
-                fatal_error(f"{self.path}: invalid key '{key}'")
+            if key not in self.required and key not in self.optional:
+                logging.warning("%s: unexpected key %r", self.path, key)
+        self.data = {**self.required, **self.optional, **defaults, **self.data}
 
     @classmethod
-    def load(cls: Type[T], path: Path, defaults: Dict[str, Any] = None) -> T:
-        """Load config from a file."""
+    def load(cls: Type[T], path: Path) -> T:
+        """Load configuration from a file."""
         with open(path) as f:
-            return cls.load_from(path, f, defaults)
+            return cls.load_from(path, f)
 
     @classmethod
-    def loads(
-        cls: Type[T], path: Path, content: str, defaults: Dict[str, Any] = None
-    ) -> T:
-        """Load config from a string."""
-        return cls.load_from(path, StringIO(content), defaults)
+    def loads(cls: Type[T], path: Path, content: str) -> T:
+        """Load configuration from a string."""
+        return cls.load_from(path, StringIO(content))
 
     @classmethod
-    def load_from(
-        cls: Type[T], path: Path, content: TextIO, defaults: Dict[str, Any] = None
-    ) -> T:
+    def load_from(cls: Type[T], path: Path, content: TextIO) -> T:
         try:
             data = yaml.safe_load(content)
         except yaml.YAMLError as ex:
-            fatal_error(f"cannot parse {path}: {ex}")
+            logging.error("cannot parse %s: %s", path, ex)
         if not isinstance(data, dict):
-            fatal_error(f"invalid YAML in {path}: {type(data)}")
-        if defaults:
-            data = {**defaults, **data}
+            logging.error("invalid YAML in %s: %s", path, type(data))
+            data = {}
         return cls(path, data)
 
     def __getitem__(self, key: str) -> Any:
-        if key in self.REQUIRED:
-            return self.data[key]
-        if key in self.OPTIONAL:
-            return self.data.get(key, self.OPTIONAL[key])
-        raise ValueError(f"Invalid key {key}")
-
-
-class ProjectConfig(Config):
-
-    REQUIRED = {
-        "project_name",
-    }
-
-    OPTIONAL = {
-        "inline_code_macro": None,
-        "smart_typography": False,
-    }
-
-
-class ArticleConfig(Config):
-
-    REQUIRED = {
-        "title",
-        "slug",
-    }
+        return self.data[key]

@@ -1,14 +1,25 @@
 """Zendown article."""
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, cast
 
 from mistletoe.block_token import BlockToken, Document, Heading
 from slugify import slugify
 
-from zendown.config import ArticleConfig
+from zendown.config import Config
 from zendown.tree import Label, Node
 from zendown.zfm import Context, ZFMRenderer, postprocess_heading
+
+
+class ArticleConfig(Config):
+
+    required = {
+        "title": "Untitled Article",
+        "slug": None,
+    }
+
+    optional: Dict[str, Any] = {}
 
 
 class Section:
@@ -31,6 +42,10 @@ class Section:
 Anchor = Label[Section]
 
 
+class ParseError(Exception):
+    """An error that occurs while parsing an article."""
+
+
 class Article:
 
     """An article written in ZFM with a YAML configuration header."""
@@ -44,6 +59,9 @@ class Article:
         self._doc: Optional[Document] = None
         self._tree: Optional[Node[Section]] = None
         self._anchors: Optional[Dict[Anchor, Section]] = None
+
+    def __repr__(self) -> str:
+        return f"Article(ref={self.node.ref!r}, path={self.path!r})"
 
     def is_loaded(self) -> bool:
         """Return true if the article has been loaded."""
@@ -60,6 +78,7 @@ class Article:
         This sets self.cfg (parsed configuration) and self.raw (raw, unparsed
         body of the article).
         """
+        logging.info("loading article %r from %s", self.node.ref, self.path)
         with open(self.path) as f:
             head = ""
             for line in f:
@@ -67,8 +86,9 @@ class Article:
                     break
                 head += line
             body = f.read()
-        defaults = {"slug": slugify(self.path.with_suffix("").name)}
-        self.cfg = ArticleConfig.loads(self.path, head, defaults)
+        self.cfg = ArticleConfig.loads(self.path, head)
+        self.cfg.validate(slug=slugify(self.path.with_suffix("").name))
+        logging.debug("article %r config: %r", self.node.ref, self.cfg)
         self.raw = body
         self._doc = None
         self._tree = None
@@ -85,6 +105,7 @@ class Article:
         on demand when properties are accessed.
         """
         assert self.is_loaded()
+        logging.debug("parsing article %r", self.node.ref)
         self._doc = Document(self.raw)
         self._tree = Node.root()
         parent = self._tree

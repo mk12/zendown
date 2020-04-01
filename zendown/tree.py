@@ -1,6 +1,7 @@
 """Tree structure for articles."""
 
-from typing import Any, Dict, Generic, Iterator, Optional, Tuple, TypeVar, Union
+import sys
+from typing import Any, Dict, Generic, Iterator, Optional, TextIO, Tuple, TypeVar, Union
 
 
 T = TypeVar("T")
@@ -72,6 +73,23 @@ class Node(Generic[T]):
         self.ref: Optional[Ref[T]] = None
         self.item: Optional[T] = None
         self.children: Dict[Label[T], Node[T]] = {}
+
+    def __repr__(self) -> str:
+        return f"Node(label={self.label!r}, ref={self.ref!r}, item={self.item!r})"
+
+    def print_tree(self, out: TextIO = sys.stdout):
+        """Print the tree rooted at this node."""
+
+        def go(node: Node[T], indent: int):
+            space = "    " * indent
+            item = ""
+            if node.item:
+                item = f" = {node.item!r}"
+            print(f"{space}{node.label}{item}", file=out)
+            for child in node.children.values():
+                go(child, indent + 1)
+
+        go(self, 0)
 
     @staticmethod
     def root():

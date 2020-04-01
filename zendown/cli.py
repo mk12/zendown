@@ -1,11 +1,13 @@
 """Command-line interface."""
 
 import argparse
+import logging
 from pathlib import Path
 import sys
 
 from zendown.build import BuildError, Options, builders
 from zendown.files import create_project
+from zendown.logs import fatal, setup_logging
 from zendown.project import Project
 
 
@@ -17,10 +19,21 @@ def main():
             commands[args.help_target].print_help()
         else:
             parser.print_help()
-    else:
-        command = globals()[f"command_{args.command}"]
-        assert command, "unexpected command name"
-        command(args)
+        return
+
+    log_level = logging.WARNING
+    if args.verbose and args.verbose == 1:
+        log_level = logging.INFO
+    elif args.verbose and args.verbose >= 2:
+        log_level = logging.DEBUG
+    exit_level = logging.ERROR
+    if args.ignore_errors:
+        exit_level = logging.FATAL
+    setup_logging(sys.stderr, log_level, exit_level)
+
+    command = globals()[f"command_{args.command}"]
+    assert command, "unexpected command name"
+    command(args)
 
 
 def get_parser():
@@ -49,16 +62,24 @@ def get_parser():
     )
 
     parser_build = commands.add_parser("build", help="build the project")
-    parser_build.add_argument(
-        "-i",
-        "--ignore-errors",
-        action="store_true",
-        help="keep going if there are errors",
-    )
     parser_build.add_argument("builder", choices=builders.keys(), help="build target")
     parser_build.add_argument(
         "query", nargs="?", default="", help="filter articles by ref",
     )
+
+    for subparser in [parser_new, parser_list, parser_build]:
+        subparser.add_argument(
+            "-i",
+            "--ignore-errors",
+            action="store_true",
+            help="keep going if there are errors",
+        )
+        subparser.add_argument(
+            "-v",
+            "--verbose",
+            action="count",
+            help="increase loggging (can use multiple times)",
+        )
 
     return parser, commands.choices
 
@@ -76,12 +97,9 @@ def command_list(args):
 
 def command_build(args):
     project = Project.find()
-    options = Options(ignore_errors=args.ignore_errors)
-    builder = builders[args.builder](project, options)
+    builder = builders[args.builder](project, Options())
     articles = project.query(args.query)
     try:
         builder.build(articles)
     except BuildError as ex:
-        # ANSI escape code for red, bold text.
-        print(f"\x1b[31;1mERROR:\x1b[0m {ex}")
-        sys.exit(1)
+        fatal(ex)

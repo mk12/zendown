@@ -14,8 +14,6 @@ class Options(NamedTuple):
 
     """Options for building."""
 
-    ignore_errors: bool = False
-
 
 class BuildError(Exception):
     """An error that occurs during building."""

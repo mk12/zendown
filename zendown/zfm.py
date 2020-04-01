@@ -1,6 +1,7 @@
 """Zendown flavored Markdown. It extends Markdown with macros."""
 
 import inspect
+import logging
 import re
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
 
@@ -10,7 +11,6 @@ from mistletoe.html_renderer import HTMLRenderer
 
 from zendown.tokens import Token, walk
 from zendown.tree import COLLISION, Label, Ref
-from zendown.utils import smartify
 
 # Only import these for mypy.
 if False:  # pylint: disable=using-constant-test
@@ -40,6 +40,21 @@ def postprocess_heading(heading: Heading, make_slug: Callable[[str], str]):
 
     walk(heading.children, collect_text)
     heading.identifier = make_slug(text)
+
+
+def smartify(text: str) -> str:
+    """Augment text with smart typography.
+
+    This replaces dumb quotes with curly quotes, "..." with ellipses, and "--"
+    with em dashes.
+    """
+    text = re.sub(r"([a-zA-Z0-9.,?!;:\'\"])\"", r"\1”", text)
+    text = text.replace(r'"', r"“")
+    text = re.sub(r"([a-zA-Z0-9.,?!;:\'\"])'", r"\1’", text)
+    text = text.replace(r"'", r"‘")
+    text = text.replace(r"...", r"…")
+    text = text.replace(r"--", r"—")
+    return text
 
 
 class Context:
@@ -182,6 +197,7 @@ class BlockMacro(BlockToken):
 
 class RenderError(Exception):
     """An error that occurs during rendering."""
+    # TODO consider removing
 
 
 class ZFMRenderer(HTMLRenderer):
@@ -197,9 +213,8 @@ class ZFMRenderer(HTMLRenderer):
 
     def error(self, kind: str, *info: str) -> str:
         info_str = ": ".join(info)
-        if self.ctx.builder.options.ignore_errors:
-            return f"💥{kind.upper()}: {info_str}💥"
-        raise RenderError(f"{kind}: {info_str}")
+        logging.error("%s: %s: %s", self.ctx.article.path, kind, info_str)
+        return f"�{kind.upper()}: {info_str}�"
 
     def run_macro(self, name: str, arg: str, children: Any) -> str:
         macro_obj = self.ctx.project.get_macro(name)
