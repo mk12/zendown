@@ -1,7 +1,19 @@
-"""Tree structure for articles."""
+"""Generic tree structure."""
+
+from __future__ import annotations
 
 import sys
-from typing import Any, Dict, Generic, Iterator, Optional, TextIO, Tuple, TypeVar, Union
+from typing import (
+    Any,
+    Dict,
+    Generic,
+    Iterator,
+    Optional,
+    TextIO,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 
 T = TypeVar("T")
@@ -26,15 +38,21 @@ class Label(Generic[T]):
         return hash(self.val)
 
 
+ROOT: Label[Any] = Label("$root")
+
+
 class Ref(Generic[T]):
 
-    """A list of labels identifying a node in a tree."""
+    """A list of labels identifying a node in a tree.
+
+    The ref does not include the special root label.
+    """
 
     def __init__(self, parts: Tuple[Label[T], ...]):
         self.parts = parts
 
     @staticmethod
-    def parse(s: str) -> "Ref[T]":
+    def parse(s: str) -> Ref[T]:
         assert len(s) >= 1 and s[0] == "/"
         return Ref(tuple(Label(p) for p in s[1:].split("/")))
 
@@ -56,8 +74,6 @@ class Collision:
 
 COLLISION = Collision()
 
-ROOT: Label[Any] = Label("$root")
-
 
 class Node(Generic[T]):
 
@@ -77,8 +93,8 @@ class Node(Generic[T]):
     def __repr__(self) -> str:
         return f"Node(label={self.label!r}, ref={self.ref!r}, item={self.item!r})"
 
-    def print_tree(self, out: TextIO = sys.stdout):
-        """Print the tree rooted at this node."""
+    def dump(self, out: TextIO = sys.stdout):
+        """Dump a textual representation of this tree to out."""
 
         def go(node: Node[T], indent: int):
             space = "    " * indent
@@ -93,19 +109,27 @@ class Node(Generic[T]):
 
     @staticmethod
     def root():
+        """Return the root node. All trees should use this as their root."""
         return Node(ROOT)
 
+    def is_root(self) -> bool:
+        """Return true if this node is the root of the tree."""
+        return self.label is ROOT
+
     def set_item(self, item: T):
+        """Set this node's item."""
         self.item = item
 
-    def add_child(self, child: "Node[T]"):
+    def add_child(self, child: Node[T]):
+        """Add a child to this node."""
         self.children[child.label] = child
         child.parent = self
 
-    def is_root(self) -> bool:
-        return self.label is ROOT
-
     def set_refs_recursively(self):
+        """Set all refs in the tree.
+
+        This should be called at the end of constructing a tree.
+        """
         assert self.is_root()
 
         def go(node: Node[T]):
@@ -117,12 +141,20 @@ class Node(Generic[T]):
         self.ref = Ref(())
         go(self)
 
-    def traverse_nodes(self) -> Iterator["Node[T]"]:
+    def items_of_children(self) -> Iterator[T]:
+        """Yield items of the children of this node."""
+        for child in self.children.values():
+            if child.item:
+                yield child.item
+
+    def traverse_nodes(self) -> Iterator[Node[T]]:
+        """Yield all nodes in the tree rooted at this node."""
         yield self
         for child in self.children.values():
             yield from child.traverse_nodes()
 
     def items_by_ref(self) -> Dict[Ref[T], T]:
+        """Return a map from refs to nodes in this tree."""
         items = {}
         for node in self.traverse_nodes():
             if node.item is not None:
@@ -131,6 +163,11 @@ class Node(Generic[T]):
         return items
 
     def items_by_label(self) -> Dict[Label[T], Union[T, Collision]]:
+        """Return a map from labels to nodes in this tree.
+
+        Labels that are ambiguous (multiple nodes in the tree have that label)
+        are instead mapped to the special value COLLISION.
+        """
         items: Dict[Label[T], Union[T, Collision]] = {}
         for node in self.traverse_nodes():
             if node.item is not None:

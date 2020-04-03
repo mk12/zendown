@@ -1,8 +1,9 @@
 """Build targets for projects."""
 
 from abc import ABC, abstractmethod
+import logging
 from pathlib import Path
-from typing import Iterator, NamedTuple
+from typing import Iterator, List, NamedTuple, Type
 
 from zendown.article import Article
 from zendown.files import FileSystem
@@ -13,10 +14,6 @@ from zendown.zfm import Context
 class Options(NamedTuple):
 
     """Options for building."""
-
-
-class BuildError(Exception):
-    """An error that occurs during building."""
 
 
 class Builder(ABC):
@@ -51,20 +48,20 @@ class Builder(ABC):
 
 class Html(Builder):
 
+    """Builds HTML web pages for direct browsing (no server needed)."""
+
     name = "html"
 
     def article_path(self, article: Article) -> str:
         pass
 
     def resolve_article(self, ctx: Context, article: Article) -> str:
-        return ""
+        return "ARTICLE_PATH"
 
     def resolve_asset(self, ctx: Context, rel_path: str) -> str:
         path = "assets/" + rel_path
         if not self.project.fs.join(path).exists():
-            raise BuildError(
-                f"asset {path} referenced in {ctx.article.path} does not exist"
-            )
+            logging.error("%s: asset %s does not exist", ctx.article.path, path)
         ref = ctx.article.node.ref
         assert ref
         to_root = "../" * (1 + len(ref.parts))
@@ -109,6 +106,8 @@ class Hubspot(Builder):
         print("TODO")
 
 
-builders = {builder.name: builder for builder in [Html, Hubspot]}
+_builder_list: List[Type[Builder]] = [Html, Hubspot]
+
+builders = {b.name: b for b in _builder_list}
 
 # TODO: builder that lists cross-references between articles?

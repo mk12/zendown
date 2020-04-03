@@ -1,4 +1,6 @@
-"""File structure for Zendown projects."""
+"""File system abstractions."""
+
+from __future__ import annotations
 
 import logging
 import os.path
@@ -28,7 +30,7 @@ def create_project(root: Path, project_name: str):
                 with open(path, "wb") as bf:
                     bf.write(val)
             else:
-                raise Exception(f"unexpected type: {type(val)}")
+                raise ValueError(f"unexpected type: {type(val)}")
 
     try:
         create(root, defaults.structure(project_name))
@@ -44,7 +46,7 @@ class FileSystem:
         return f"FileSystem(root={self.root!r})"
 
     @staticmethod
-    def find() -> "FileSystem":
+    def find() -> FileSystem:
         """Find the project root by searching for a zendown.yml file.
 
         Exits with a fatal log if it cannot find the file.

@@ -1,13 +1,14 @@
 """Command-line interface."""
 
-import argparse
+from argparse import ArgumentParser, Namespace
 import logging
 from pathlib import Path
 import sys
+from typing import Mapping, Tuple
 
-from zendown.build import BuildError, Options, builders
+from zendown.build import Options, builders
 from zendown.files import create_project
-from zendown.logs import fatal, setup_logging
+from zendown.logs import setup_logging
 from zendown.project import Project
 
 
@@ -36,8 +37,8 @@ def main():
     command(args)
 
 
-def get_parser():
-    parser = argparse.ArgumentParser(
+def get_parser() -> Tuple[ArgumentParser, Mapping[str, ArgumentParser]]:
+    parser = ArgumentParser(
         prog="zendown", description="tool for building Zendown projects"
     )
     commands = parser.add_subparsers(metavar="command", dest="command", required=True)
@@ -84,22 +85,19 @@ def get_parser():
     return parser, commands.choices
 
 
-def command_new(args):
+def command_new(args: Namespace):
     print(f"Creating a new Zendown project in {args.name}/")
     create_project(Path.cwd(), args.name)
 
 
-def command_list(args):
+def command_list(args: Namespace):
     project = Project.find()
     for article in project.query(args.query):
         print(article.path if args.files else article.node.ref)
 
 
-def command_build(args):
+def command_build(args: Namespace):
     project = Project.find()
     builder = builders[args.builder](project, Options())
     articles = project.query(args.query)
-    try:
-        builder.build(articles)
-    except BuildError as ex:
-        fatal(ex)
+    builder.build(articles)

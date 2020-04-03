@@ -14,7 +14,20 @@ T = TypeVar("T", bound="Config")
 
 class Config(ABC):
 
-    """Abstract base class for YAML configuration."""
+    """Abstract base class for YAML configuration.
+
+    Subclasses should override abstract properties "required" and "optional".
+
+    Example usage:
+
+        # Assuming MyConfig is a subclass of Config:
+        cfg = MyConfig.load(Path("/path/to/config.yml"))
+        cfg.validate()
+
+    Note that the creator must call validate(). They can optionally pass extra
+    defaults as keyword arguments. This is useful if the default is
+    context-dependent (static defaults can go in the required/optional dicts).
+    """
 
     def __init__(self, path: Path, data: Dict[str, Any]):
         self.path = path
@@ -37,9 +50,8 @@ class Config(ABC):
 
         This must be called manually after creating an instance.
 
-        Extra defaults can be passed for keys whose default is dynamically
-        determined. They will override the defaults from the required and
-        optional properties.
+        Extra defaults can be passed for keys as keyword arguments. They will
+        override the defaults from the "required" and "optional" properties.
         """
         for key in self.required:
             if key not in self.data:
@@ -72,4 +84,5 @@ class Config(ABC):
         return cls(path, data)
 
     def __getitem__(self, key: str) -> Any:
+        """Get a configuration value."""
         return self.data[key]

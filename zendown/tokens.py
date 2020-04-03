@@ -3,26 +3,14 @@
 from typing import Callable, List, Union
 
 from mistletoe import block_token, span_token
-from mistletoe.block_token import (  # pylint: disable=unused-import
+from mistletoe.block_token import (
     BlockToken,
-    BlockCode,
-    Heading,
-    Quote,
-    CodeFence,
-    ThematicBreak,
     List as ListToken,
     ListItem,
-    Table,
-    Footnote,
     Paragraph,
 )
-from mistletoe.span_token import (  # pylint: disable=unused-import
-    EscapeSequence,
-    Strikethrough,
-    AutoLink,
-    CoreTokens,
-    InlineCode,
-    LineBreak,
+from mistletoe.span_token import (
+    Link,
     RawText,
     SpanToken,
     Strong,
@@ -60,8 +48,18 @@ def walk(tokens: Union[Token, List[Token]], f: Callable[[Token], None]):
         go(tokens)
 
 
+def transform_text(tokens: List[Token], f: Callable[[str], str]):
+    """Transform tokens by applying f to all raw text."""
+
+    def go(t: Token):
+        if isinstance(t, RawText):
+            t.content = f(t.content)
+
+    walk(tokens, go)
+
+
 def collect_text(token: Token) -> str:
-    """Returns all the raw text in the token concatenated together."""
+    """Return all raw text in token concatenated together."""
     text = ""
 
     def go(token: Token):
@@ -79,14 +77,58 @@ def raw_text(text: str) -> RawText:
 
 
 def strong(children: List[SpanToken]) -> Strong:
-    """Create a Strong token with children."""
+    """Create a Strong token."""
     token = Strong(None)
     token.children = children
     return token
 
 
+def emphasis(children: List[SpanToken]) -> Emphasis:
+    """Create an Emphasis token"""
+    token = Emphasis(None)
+    token.children = children
+    return token
+
+
+def link(target: str, children: List[SpanToken], title: str = "") -> Link:
+    """Create a Link token."""
+    token = Link.__new__(Link)
+    token.target = target
+    token.children = children
+    token.title = title
+    return token
+
+
 def paragraph(children: List[SpanToken]) -> Paragraph:
-    """Create a paragraph token with children."""
+    """Create a Paragraph token."""
     token = Paragraph.__new__(Paragraph, [])  # pylint: disable=too-many-function-args
     token.children = children
+    return token
+
+
+def bullet_list(children: List[List[BlockToken]], loose: bool = False) -> ListToken:
+    """Create a List token with bulleted items."""
+    return list_token(children, ordered=False, loose=loose)
+
+
+def ordered_list(children: List[List[BlockToken]], loose: bool = False) -> ListToken:
+    """Create a List token with ordered items."""
+    return list_token(children, ordered=True, loose=loose)
+
+
+def list_token(
+    children: List[List[BlockToken]], ordered: bool, loose: bool,
+) -> ListToken:
+    def make_item(tokens: List[BlockToken]) -> ListItem:
+        item = ListItem.__new__(ListItem)
+        item.leader = "-"
+        item.prepend = 2
+        item.loose = loose
+        item.children = tokens
+        return item
+
+    token = ListToken.__new__(ListToken)
+    token.loose = loose
+    token.start = 1 if ordered else None
+    token.children = [make_item(tokens) for tokens in children]
     return token

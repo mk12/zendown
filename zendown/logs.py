@@ -3,19 +3,25 @@
 import logging
 from logging import Formatter, LogRecord, StreamHandler
 import sys
-from typing import Dict, TextIO, NoReturn
+from typing import Dict, TextIO, NoReturn, Optional
 
 
 class ColorFormatter(Formatter):
 
     """Log formatter that prints bold, colorized level names."""
 
+    # ANSI escape codes.
+    RED = 31
+    GREEN = 32
+    YELLOW = 33
+    MAGENTA = 35
+
     COLORS = {
-        logging.FATAL: 31,  # red
-        logging.ERROR: 31,  # red
-        logging.WARNING: 33,  # yellow
-        logging.INFO: 32,  # green
-        logging.DEBUG: 35,  # magenta
+        logging.FATAL: RED,
+        logging.ERROR: RED,
+        logging.WARNING: YELLOW,
+        logging.INFO: GREEN,
+        logging.DEBUG: MAGENTA,
     }
 
     FORMAT = "%(message)s"
@@ -42,7 +48,9 @@ class ExitStreamHandler(StreamHandler):
     level or higher. This threshold can be configured by the exit_level setting.
     """
 
-    def __init__(self, stream: TextIO = None, exit_level: int = logging.FATAL):
+    def __init__(
+        self, stream: Optional[TextIO] = None, exit_level: int = logging.FATAL
+    ):
         super().__init__(stream)
         self.exit_level = exit_level
 

@@ -1,16 +1,19 @@
 """Zendown article."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Container, Dict, Optional, cast
 
-from mistletoe.block_token import BlockToken, Document, Heading
+from mistletoe.block_token import Document, Heading
 from slugify import slugify
 
 from zendown.config import Config
+from zendown.section import Section, parse_sections
 from zendown.tokens import collect_text
 from zendown.tree import Label, Node
-from zendown.zfm import Context, ZFMRenderer, postprocess_heading
+from zendown.zfm import Context, ZFMRenderer
 
 
 class ArticleConfig(Config):
@@ -26,28 +29,9 @@ class ArticleConfig(Config):
     }
 
 
-class Section:
-
-    """A section within an article body.
-
-    A section is defined by a heading. It can be any level (H1 to H6). The
-    section stores the blocks up until the next heading of equal or lower level
-    (which are not children of the heading in the mistletoe tokenization).
-    """
-
-    def __init__(self, node: Node["Section"], heading: Heading):
-        self.node = node
-        self.heading = heading
-        self.blocks: List[BlockToken] = []
-
-
 # Sections form a tree, but we refer to them by Label rather than Ref because
 # they must have unique labels (since they are used for the HTML id attribute).
 Anchor = Label[Section]
-
-
-class ParseError(Exception):
-    """An error that occurs while parsing an article."""
 
 
 class Article:
@@ -70,11 +54,11 @@ class Article:
     rendered results are not stored in the object.
     """
 
-    def __init__(self, path: Path, node: Node["Article"]):
+    def __init__(self, path: Path, node: Node[Article]):
         """Create a new article at the given filesystem path and tree node."""
         self.path = path
         self.node = node
-        self.cfg: Optional[Mapping[str, Any]] = None
+        self.cfg: Optional[ArticleConfig] = None
         self.raw: Optional[str] = None
         self._doc: Optional[Document] = None
         self._tree: Optional[Node[Section]] = None
@@ -128,56 +112,28 @@ class Article:
         assert self.is_loaded()
         logging.info("parsing article %r", self.node.ref)
         self._doc = Document(self.raw)
-        self._tree = Node.root()
-        self._anchors = {}
-        parent = self._tree
-        blocks = []
-        prev = None
-        for token in self.doc.children:
-            if not isinstance(token, Heading):
-                blocks.append(token)
-                continue
-            if prev:
-                prev.item.blocks = blocks
-            blocks = []
-            postprocess_heading(token)
-            if token.identifier:
-                original_id = token.identifier
-                if Label(original_id) in self.anchors:
-                    logging.error("%s: duplicate heading ID %r", self.path, original_id)
-            else:
-                original_id = slugify(collect_text(token))
-            i = 1
-            unique_id = original_id
-            while Label(unique_id) in self._anchors:
-                unique_id = f"{original_id}-{i}"
-                i += 1
-            # Set token.identifier since it will be rendered to the HTML id.
-            token.identifier = unique_id
-            label = Label(unique_id)
-            node = Node(label)
-            section = Section(node, token)
-            node.set_item(section)
-            self._anchors[label] = section
-            if prev and token.level > prev.item.heading.level:
-                parent = prev
-            else:
-                while parent.item and token.level <= parent.item.heading.level:
-                    parent = parent.parent
-            parent.add_child(node)
-            prev = node
-        if prev:
-            prev.item.blocks = blocks
+        self._tree = parse_sections(self._doc.children, self.gen_heading_label)
+        # Cast since we know there will be no collisions.
+        self._anchors = cast(Dict[Label[Section], Section], self._tree.items_by_label())
 
-        def extend_blocks(node: Node[Section]) -> List[BlockToken]:
-            assert node.item
-            for child in node.children.values():
-                node.item.blocks.extend(extend_blocks(child))
-            return [node.item.heading] + node.item.blocks
-
-        for node in self._tree.children.values():
-            extend_blocks(node)
-        self._tree.set_refs_recursively()
+    def gen_heading_label(
+        self, heading: Heading, used: Container[Label[Section]]
+    ) -> Label[Section]:
+        """Choose a label for the heading that is not already used."""
+        if heading.identifier:
+            original_id = heading.identifier
+            if Label(original_id) in used:
+                logging.error("%s: duplicate heading ID %r", self.path, original_id)
+        else:
+            original_id = slugify(collect_text(heading))
+        i = 1
+        unique_id = original_id
+        while Label(unique_id) in used:
+            unique_id = f"{original_id}-{i}"
+            i += 1
+        # Set heading.identifier since it will be rendered as the HTML id.
+        heading.identifier = unique_id
+        return Label(unique_id)
 
     @property
     def doc(self) -> Document:

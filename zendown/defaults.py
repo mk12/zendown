@@ -1,13 +1,14 @@
 """Default files for a Zendown project."""
 
 from base64 import b64decode
+from typing import Any, Dict
 
-from zendown import macros
+from zendown import example_macros
 
 
-def structure(name):
+def structure(name: str) -> Dict[str, Any]:
     """Default project structure."""
-    with open(macros.__file__) as f:
+    with open(example_macros.__file__) as f:
         macros_py = f.read()
     return {
         name: {
@@ -46,8 +47,8 @@ __pycache__
 
 zendown_yml = """\
 project_name: {0}
-inline_code_macro: upper
 smart_typography: true
+inline_code_macro: pop
 """.format
 
 
@@ -60,16 +61,21 @@ title: My first article
 
 # Introduction
 
-Here's a [self-link](/first).
+This is my [first article](/first). This link also works: [](first).
 
 ![Photo of a tiger](tiger.jpg)
 
 @note:
 > Did you know tigers can weigh as much as 660 pounds?
 
+<!-- Comments are stripped. -->
+@yell{Macros are fun}!
+
+`This` is the same as @pop{this}.
+
 # Conclusion
 
-@upper{Macros} are `fun`!
+Enjoy!
 """
 
 
