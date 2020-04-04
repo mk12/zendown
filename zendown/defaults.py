@@ -16,6 +16,7 @@ def structure(name: str) -> Dict[str, Any]:
             "macros.py": macros_py,
             "zendown.yml": zendown_yml(name),
             "content": {"first.md": first_md},
+            "includes": {"notice.md": notice_md}
             "assets": {"tiger.jpg": b64decode(tiger_jpg_base64)},
         }
     }
@@ -61,7 +62,9 @@ title: My first article
 
 # Introduction
 
-This is my [first article](/first). This link also works: [](first).
+This is my [first article](/first).
+
+This link also works: [](first).
 
 ![Photo of a tiger](tiger.jpg)
 
@@ -73,9 +76,19 @@ This is my [first article](/first). This link also works: [](first).
 
 `This` is the same as @pop{this}.
 
+# Intermission
+
+@include{notice}
+
 # Conclusion
 
 Enjoy!
+"""
+
+
+notice_md = """\
+@note:
+> Greetings from includes/notice.md.
 """
 
 

@@ -1,7 +1,7 @@
 """Build targets for projects."""
 
-from abc import ABC, abstractmethod
 import logging
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Iterator, List, NamedTuple, Type
 
@@ -71,6 +71,7 @@ class Html(Builder):
         for article in articles:
             ctx = self.context(article)
             article.ensure_loaded()
+            print('<meta charset="utf-8">')
             print(article.render_html(ctx))
             # TODO: pandoc step. add title, etc.
             # TODO: do builders need to have additional input, e.g. css

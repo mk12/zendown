@@ -3,6 +3,8 @@ PIP := pip3
 
 PKG := zendown
 
+ALL_PYTHON := zendown tests setup.py
+
 .PHONY: help dev test tc lint fmt install clean
 
 help:
@@ -32,7 +34,8 @@ lint:
 	$(PY) -m pylint $(PKG)
 
 fmt:
-	$(PY) -m black .
+	$(PY) -m isort -rc $(ALL_PYTHON)
+	$(PY) -m black $(ALL_PYTHON)
 
 clean:
 	rm -rf $(PKG).egg-info

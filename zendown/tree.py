@@ -3,17 +3,7 @@
 from __future__ import annotations
 
 import sys
-from typing import (
-    Any,
-    Dict,
-    Generic,
-    Iterator,
-    Optional,
-    TextIO,
-    Tuple,
-    TypeVar,
-    Union,
-)
+from typing import Any, Dict, Generic, Iterator, Optional, TextIO, Tuple, TypeVar, Union
 
 
 T = TypeVar("T")

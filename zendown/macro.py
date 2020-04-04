@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import enum
 import inspect
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING, TypeVar, Union
+import logging
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypeVar, Union
 
 from mistletoe.block_token import BlockToken
 
@@ -71,8 +72,8 @@ def inline_macro(f: IMF) -> IMF:
     """Decorator that marks a function as an inline macro."""
     scope = getattr(f, "__globals__")
     if not "_macros" in scope:
-        scope["_macros"] = {kind: {} for kind in Kind}
-    scope["_macros"][f.__name__] = Macro(f, Kind.INLINE)
+        scope["_macros"] = {}
+    scope["_macros"][f.__name__] = Macro(Kind.INLINE, f)
     return f
 
 
@@ -80,8 +81,8 @@ def block_macro(f: BMF) -> BMF:
     """Decorator that marks a function as a block macro."""
     scope = getattr(f, "__globals__")
     if not "_macros" in scope:
-        scope["_macros"] = {kind: {} for kind in Kind}
-    scope["_macros"][f.__name__] = Macro(f, Kind.BLOCK)
+        scope["_macros"] = {}
+    scope["_macros"][f.__name__] = Macro(Kind.BLOCK, f)
     return f
 
 
@@ -107,8 +108,8 @@ class Macro:
             an argument when invoking the macro in an article.
 
         children: List[BlockItem]
-            Optional. The tokenized children provided in the blockquote
-            following the colon. For example:
+            Optional (block macros only). The tokenized children provided in the
+            blockquote following the colon. For example:
 
                 @tip:
                 > _This_ paragraph is `children[0]`.
@@ -119,21 +120,25 @@ class Macro:
     The function must return a string of rendered HTML.
     """
 
-    def __init__(self, function: MacroFunction, kind: Kind):
+    def __init__(self, kind: Kind, function: MacroFunction):
+        self.kind = kind
         self.name = function.__name__
         self.function: Callable[..., str] = function
-        self.kind = kind
         parameters = inspect.signature(function).parameters
         self.requires_arg = "arg" in parameters
         self.requires_children = "children" in parameters
+        if kind is Kind.INLINE and self.requires_children:
+            logging.error("inline macro %s should not take children", self.name)
 
     def __call__(self, ctx: Context, arg: str, children: List[BlockToken]) -> str:
         arguments: Dict[str, Any] = {"ctx": ctx}
         if self.requires_arg:
             arguments["arg"] = arg
         elif arg:
-            raise MacroError("macro does not take argument")
+            raise MacroError(f"unexpected argument {arg!r}")
         if self.requires_children:
+            if not children:
+                raise MacroError("macro needs a blockquote")
             arguments["children"] = children
         elif children:
             raise MacroError("macro does not take blockquote")

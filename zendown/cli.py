@@ -1,9 +1,9 @@
 """Command-line interface."""
 
-from argparse import ArgumentParser, Namespace
 import logging
-from pathlib import Path
 import sys
+from argparse import ArgumentParser, Namespace
+from pathlib import Path
 from typing import Mapping, Tuple
 
 from zendown.build import Options, builders

@@ -1,13 +1,12 @@
 """Configuration file parser."""
 
+import logging
 from abc import ABC, abstractproperty
 from io import StringIO
-import logging
 from pathlib import Path
 from typing import Any, Dict, TextIO, Type, TypeVar
 
 import yaml
-
 
 T = TypeVar("T", bound="Config")
 

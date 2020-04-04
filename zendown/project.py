@@ -6,8 +6,9 @@ import importlib.util
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Optional, Iterator, Union
+from typing import Dict, Iterator, Optional, Union
 
+from zendown import builtin_macros
 from zendown.article import Article
 from zendown.config import Config
 from zendown.files import FileSystem
@@ -23,8 +24,9 @@ class ProjectConfig(Config):
     }
 
     optional = {
-        "smart_typography": False,
         "inline_code_macro": None,
+        "smart_typography": False,
+        "image_links": False,
     }
 
 
@@ -79,8 +81,10 @@ class Project:
             logging.info("loading macros file %s", f)
             spec = importlib.util.spec_from_file_location("macros", f)
             module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module) # type: ignore
-            self.macros = getattr(module, "_macros", None)
+            spec.loader.exec_module(module)  # type: ignore
+            builtin = getattr(builtin_macros, "_macros")
+            custom = getattr(module, "_macros", {})
+            self.macros = {**builtin, **custom}
 
     def get_macro(self, name: str) -> Optional[Macro]:
         """Get the macro with the given name."""

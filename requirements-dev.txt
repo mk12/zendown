@@ -1,4 +1,5 @@
 black
+isort>=4,<5
 mypy
 pylint>=2,<3
 pytest>=4,<5

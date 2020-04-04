@@ -1,9 +1,9 @@
 """Logging configuration."""
 
 import logging
-from logging import Formatter, LogRecord, StreamHandler
 import sys
-from typing import Dict, TextIO, NoReturn, Optional
+from logging import Formatter, LogRecord, StreamHandler
+from typing import Dict, NoReturn, Optional, TextIO
 
 
 class ColorFormatter(Formatter):

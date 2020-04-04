@@ -12,8 +12,20 @@ from slugify import slugify
 from zendown.config import Config
 from zendown.section import Section, parse_sections
 from zendown.tokens import collect_text
-from zendown.tree import Label, Node
-from zendown.zfm import Context, ZFMRenderer
+from zendown.tree import Label, Node, Ref
+from zendown.zfm import Context, ZFMRenderer, parse_document
+
+
+class Link:
+
+    """A link to an article, optionally specifying an anchor."""
+
+    def __init__(self, ref: Ref[Article], anchor: Optional[Label[Section]]):
+        self.ref = ref
+        self.anchor = anchor
+
+    def __repr__(self) -> str:
+        return f"Link(ref={self.ref!r}, anchor={self.anchor!r})"
 
 
 class ArticleConfig(Config):
@@ -111,7 +123,8 @@ class Article:
         """
         assert self.is_loaded()
         logging.info("parsing article %r", self.node.ref)
-        self._doc = Document(self.raw)
+        assert self.raw is not None
+        self._doc = parse_document(self.raw)
         self._tree = parse_sections(self._doc.children, self.gen_heading_label)
         # Cast since we know there will be no collisions.
         self._anchors = cast(Dict[Label[Section], Section], self._tree.items_by_label())

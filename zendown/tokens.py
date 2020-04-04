@@ -1,22 +1,10 @@
-"""Helpers for building mistletoe tokens."""
+"""Helpers for building and manipulating mistletoe tokens."""
 
 from typing import Callable, List, Union
 
 from mistletoe import block_token, span_token
-from mistletoe.block_token import (
-    BlockToken,
-    List as ListToken,
-    ListItem,
-    Paragraph,
-)
-from mistletoe.span_token import (
-    Link,
-    RawText,
-    SpanToken,
-    Strong,
-    Emphasis,
-)
-
+from mistletoe.block_token import BlockToken, HTMLBlock, ListItem, Paragraph
+from mistletoe.span_token import Emphasis, HTMLSpan, Link, RawText, SpanToken, Strong
 
 Token = Union[SpanToken, BlockToken]
 
@@ -46,6 +34,19 @@ def walk(tokens: Union[Token, List[Token]], f: Callable[[Token], None]):
             go(token)
     else:
         go(tokens)
+
+
+def strip_comments(token: Token):
+    """Remove all HTML comment tokens."""
+
+    def is_comment(t: Token) -> bool:
+        return isinstance(t, (HTMLBlock, HTMLSpan)) and t.content.startswith("<!--")
+
+    def go(t: Token):
+        if hasattr(t, "children"):
+            t.children = [child for child in t.children if not is_comment(child)]
+
+    walk(token, go)
 
 
 def transform_text(tokens: List[Token], f: Callable[[str], str]):
@@ -106,19 +107,23 @@ def paragraph(children: List[SpanToken]) -> Paragraph:
     return token
 
 
-def bullet_list(children: List[List[BlockToken]], loose: bool = False) -> ListToken:
+def bullet_list(
+    children: List[List[BlockToken]], loose: bool = False
+) -> block_token.List:
     """Create a List token with bulleted items."""
     return list_token(children, ordered=False, loose=loose)
 
 
-def ordered_list(children: List[List[BlockToken]], loose: bool = False) -> ListToken:
+def ordered_list(
+    children: List[List[BlockToken]], loose: bool = False
+) -> block_token.List:
     """Create a List token with ordered items."""
     return list_token(children, ordered=True, loose=loose)
 
 
 def list_token(
     children: List[List[BlockToken]], ordered: bool, loose: bool,
-) -> ListToken:
+) -> block_token.List:
     def make_item(tokens: List[BlockToken]) -> ListItem:
         item = ListItem.__new__(ListItem)
         item.leader = "-"
@@ -127,7 +132,7 @@ def list_token(
         item.children = tokens
         return item
 
-    token = ListToken.__new__(ListToken)
+    token = block_token.List.__new__(block_token.List)
     token.loose = loose
     token.start = 1 if ordered else None
     token.children = [make_item(tokens) for tokens in children]
