@@ -47,7 +47,7 @@ def warning(ctx: Context, children: List[BlockToken]) -> str:
 @block_macro
 def defs(ctx: Context, children: List[BlockToken]) -> str:
     result = []
-    for section in parse_sections(children).items_of_children():
+    for section in parse_sections(children).first_level():
         label = strong(section.heading.children)
         blocks = section.blocks[:]
         if len(blocks) >= 1 and isinstance(blocks[0], Paragraph):
@@ -61,7 +61,7 @@ def defs(ctx: Context, children: List[BlockToken]) -> str:
 @block_macro
 def toc(ctx: Context) -> str:
     items = []
-    for section in ctx.article.tree.items_of_children():
+    for section in ctx.article.sections.first_level():
         anchor_link = link(f"#{section.heading.identifier}", section.heading.children)
         items.append([paragraph([anchor_link])])
     result = [paragraph([raw_text("In this article:")]), bullet_list(items)]

@@ -4,12 +4,13 @@ import logging
 import sys
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
-from typing import Mapping, Tuple
+from typing import Any, Mapping, Tuple
 
 from zendown.build import Options, builders
 from zendown.files import create_project
 from zendown.logs import setup_logging
 from zendown.project import Project
+from zendown.tokens import collect_text
 
 
 def main():
@@ -28,7 +29,7 @@ def main():
     elif args.verbose and args.verbose >= 2:
         log_level = logging.DEBUG
     exit_level = logging.ERROR
-    if args.ignore_errors:
+    if args.keep_going:
         exit_level = logging.FATAL
     setup_logging(sys.stderr, log_level, exit_level)
 
@@ -62,16 +63,33 @@ def get_parser() -> Tuple[ArgumentParser, Mapping[str, ArgumentParser]]:
         "query", nargs="?", default="", help="filter articles by ref",
     )
 
+    parser_info = commands.add_parser("info", help="show article information")
+    parser_info.add_argument(
+        "-o", "--outline", action="store_true", help="show article outline"
+    )
+    parser_info.add_argument(
+        "-l", "--links", action="store_true", help="show incoming/outgoing links"
+    )
+    parser_info.add_argument(
+        "-a", "--assets", action="store_true", help="show assets referenced"
+    )
+    parser_info.add_argument(
+        "-i", "--includes", action="store_true", help="show includes referenced"
+    )
+    parser_info.add_argument(
+        "query", nargs="?", default="", help="filter articles by ref",
+    )
+
     parser_build = commands.add_parser("build", help="build the project")
     parser_build.add_argument("builder", choices=builders.keys(), help="build target")
     parser_build.add_argument(
         "query", nargs="?", default="", help="filter articles by ref",
     )
 
-    for subparser in [parser_new, parser_list, parser_build]:
+    for subparser in [parser_new, parser_list, parser_info, parser_build]:
         subparser.add_argument(
-            "-i",
-            "--ignore-errors",
+            "-k",
+            "--keep-going",
             action="store_true",
             help="keep going if there are errors",
         )
@@ -101,3 +119,57 @@ def command_build(args: Namespace):
     builder = builders[args.builder](project, Options())
     articles = project.query(args.query)
     builder.build(articles)
+
+
+def command_info(args: Namespace):
+    project = Project.find()
+    printer = InfoPrinter()
+    for article in project.query(args.query):
+        article.ensure_loaded()
+        assert article.cfg
+        printer.topic(article.node.ref)
+        printer.heading("Title")
+        printer.item(article.cfg["title"])
+        if args.outline:
+            printer.heading("Outline")
+            for section in article.sections:
+                leader = "#" * section.heading.level
+                text = collect_text(section.heading)
+                printer.item(f"{leader} {text}")
+        if args.links:
+            printer.heading("Outgoing links")
+            for link in article.links:
+                printer.item(link)
+            printer.heading("Incoming links")
+            for source in project.inverse_links[article]:
+                printer.item(source.node.ref)
+        if args.assets:
+            printer.heading("Assets")
+            for asset in article.assets:
+                printer.item(asset.path)
+        if args.includes:
+            printer.heading("Includes")
+            for include in article.includes:
+                printer.item(include.path)
+
+
+class InfoPrinter:
+
+    """Helper class for implementing command_info."""
+
+    def __init__(self):
+        self.first = True
+
+    def topic(self, s: Any):
+        if not self.first:
+            print()
+        self.first = False
+        print(s)
+
+    @staticmethod
+    def heading(s: Any):
+        print(f"\n    {s}:")
+
+    @staticmethod
+    def item(s: Any):
+        print(f"    {s}")

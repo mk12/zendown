@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any
 
 from mistletoe import block_token, span_token
 from mistletoe.block_token import BlockToken, Document, Heading, Quote, tokenize
@@ -13,7 +13,6 @@ from mistletoe.span_token import Image, InlineCode, Link, RawText, SpanToken
 
 from zendown.macro import Context, Kind, MacroError
 from zendown.tokens import link, raw_text, strip_comments
-from zendown.tree import COLLISION, Label, Ref
 
 if TYPE_CHECKING:
     # pylint: disable=cyclic-import
@@ -22,6 +21,7 @@ if TYPE_CHECKING:
 
 def parse_document(raw: str) -> Document:
     """Parse a ZFM document."""
+    # TODO handle includes here?
     block_token.remove_token(Heading)
     block_token.add_token(ExtendedHeading)
     block_token.add_token(BlockMacro)
@@ -169,6 +169,10 @@ class ZFMRenderer(HTMLRenderer):
 
     def error(self, message: str) -> str:
         logging.error("%s: %s", self.ctx.article.path, message)
+        return self.render_error(message)
+
+    @staticmethod
+    def render_error(message: str) -> str:
         return f'<span style="color: red; font-weight: bold">[{message}]</span>'
 
     def run_macro(self, name: str, arg: str, children: Any, kind: Kind) -> str:
@@ -215,36 +219,13 @@ class ZFMRenderer(HTMLRenderer):
     def render_link(self, token: Link) -> str:
         if not token.target:
             return self.error("invalid empty link")
-        if "." not in token.target:
-            path, anchor = token.target, ""
-            if "#" in path:
-                path, anchor = path.split("#", 1)
-            article: Optional[Article] = None
-            if path == "":
-                article = self.ctx.article
-            elif path.startswith("/"):
-                ref: Ref[Article] = Ref.parse(path)
-                article = self.ctx.project.articles_by_ref.get(ref)
-            elif "/" not in path:
-                label: Label[Article] = Label(path)
-                maybe_article = self.ctx.project.articles_by_label.get(label)
-                if maybe_article is COLLISION:
-                    return self.error(f"ambiguous article name {path!r}")
-                article = cast(Optional["Article"], maybe_article)
-            if article is None:
-                return self.error(f"invalid article link {token.target!r}")
-            url = self.ctx.builder.resolve_article(self.ctx, article)
-            if anchor:
-                if article.anchors.get(Label(anchor)) is None:
-                    return self.error(
-                        f"article {article.node.ref!r} has no anchor {anchor!r}"
-                    )
-                url += "#" + anchor
-            token.target = url
+        internal_link = getattr(token, "internal_link", None)
+        if internal_link:
+            if internal_link.error:
+                return self.render_error(internal_link.error)
+            token.target = self.ctx.builder.resolve_link(self.ctx, internal_link)
             if not token.children:
-                article.ensure_loaded()
-                assert article.cfg
-                token.children = [raw_text(article.cfg["title"])]
+                token.children = [raw_text(internal_link.article.cfg["title"])]
         return super().render_link(token)
 
     def render_image(self, token: Image) -> str:

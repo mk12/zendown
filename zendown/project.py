@@ -6,15 +6,16 @@ import importlib.util
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Iterator, Optional, Union
+from typing import Dict, Iterator, List, Optional
 
-from zendown import builtin_macros
 from zendown.article import Article
+from zendown.asset import Asset
 from zendown.config import Config
 from zendown.files import FileSystem
+from zendown.include import Include
 from zendown.logs import fatal
 from zendown.macro import Macro
-from zendown.tree import Collision, Label, Node, Ref
+from zendown.tree import Label, Ref, Tree
 
 
 class ProjectConfig(Config):
@@ -34,8 +35,8 @@ class Project:
 
     """A Zendown project.
 
-    A project comprises a configuration file, a tree of articles, a directory of
-    assets, and optionally a macros file.
+    A project comprises a configuration file, a macros file, and trees of
+    articles, assets, and include files.
 
     Projects should be created via Project.find(). This will:
 
@@ -44,17 +45,19 @@ class Project:
         * Scan the articles.
 
     Scanning articles only implies locating the files. None of the article files
-    will be read until Article.load is called (by a Builder).
+    will be read until Article.load is called (by a Builder). Assets and
+    include files are locating on demand by get_asset and get_include.
     """
 
     def __init__(self, fs: FileSystem, cfg: ProjectConfig):
         self.fs = fs
         self.cfg = cfg
         self.name = cfg["project_name"]
-        self.tree: Node[Article] = Node.root()
-        self.articles_by_ref: Dict[Ref[Article], Article] = {}
-        self.articles_by_label: Dict[Label[Article], Union[Article, Collision]] = {}
         self.macros: Optional[Dict[str, Macro]] = None
+        self.assets: Tree[Asset] = Tree()
+        self.includes: Tree[Include] = Tree()
+        self.articles: Tree[Article] = Tree()
+        self._inverse_links: Optional[Dict[Article, List[Article]]] = None
         self.load_macros()
         self.scan_articles()
 
@@ -82,9 +85,7 @@ class Project:
             spec = importlib.util.spec_from_file_location("macros", f)
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)  # type: ignore
-            builtin = getattr(builtin_macros, "_macros")
-            custom = getattr(module, "_macros", {})
-            self.macros = {**builtin, **custom}
+            self.macros = getattr(module, "_macros", None)
 
     def get_macro(self, name: str) -> Optional[Macro]:
         """Get the macro with the given name."""
@@ -92,37 +93,70 @@ class Project:
             return self.macros.get(name)
         return None
 
+    def get_asset(self, ref: Ref[Asset]) -> Optional[Asset]:
+        """Look up an asset in the project by ref."""
+        asset = self.assets.by_ref.get(ref)
+        if asset:
+            return asset
+        parts = (str(p) for p in ref.parts)
+        path = self.fs.file(Path("assets").joinpath(*parts))
+        if not path:
+            return None
+        logging.debug("found asset at %s", path)
+        return self.assets.create(ref, Asset, path)
+
+    def get_include(self, ref: Ref[Include]) -> Optional[Include]:
+        """Look up an include file in the project by ref."""
+        include = self.includes.by_ref.get(ref)
+        if include:
+            return include
+        parts = (str(p) for p in ref.parts)
+        path = self.fs.file(Path("includes").joinpath(*parts).with_suffix(".md"))
+        if not path:
+            return None
+        logging.debug("found include file at %s", path)
+        return self.includes.create(ref, Include, path)
+
     def scan_articles(self):
         """Locate all the articles in the project and populate the tree."""
         content_dir = self.fs.dir("content")
         if not content_dir:
             return
-        self.tree = Node.root()
+        self.articles = Tree()
         for path_str, _, files in os.walk(content_dir):
             path = Path(path_str)
             for name in files:
                 file_path = path / name
                 if file_path.suffix != ".md":
                     continue
-                node = self.tree
-                rel_file_path = file_path.relative_to(content_dir)
-                for part in str(rel_file_path.with_suffix("")).split("/"):
-                    label: Label[Article] = Label(part)
-                    if label in node.children:
-                        node = node.children[label]
-                    else:
-                        child = Node(label)
-                        node.add_child(child)
-                        node = child
+                relative = file_path.relative_to(content_dir)
+                ref: Ref[Article] = Ref(tuple(Label(p) for p in relative.parts))
+                self.articles.create(ref, Article, file_path)
                 logging.debug("found article at %s", file_path)
-                node.set_item(Article(file_path, node))
-        self.tree.set_refs_recursively()
-        self.articles_by_ref = self.tree.items_by_ref()
-        self.articles_by_label = self.tree.items_by_label()
 
     def query(self, substr: str) -> Iterator[Article]:
         """Iterate over articles whose refs have the given substring."""
-        for ref, article in self.articles_by_ref.items():
+        for ref, article in self.articles.by_ref.items():
             if substr in str(ref):
                 logging.debug("query %r matched article %r", substr, ref)
                 yield article
+
+    @property
+    def inverse_links(self) -> Dict[Article, List[Article]]:
+        """Return a mapping from articles to others that link to them.
+
+        This causes all articles to be loaded, parsed, and resolved.
+        """
+        if self._inverse_links is None:
+            self._inverse_links = {}
+            for source in self.articles:
+                source.ensure_loaded()
+                source.ensure_resolved(self)
+                for link in source.links:
+                    dest = link.article
+                    if dest is source:
+                        continue
+                    if dest not in self._inverse_links:
+                        self._inverse_links[dest] = []
+                    self._inverse_links[dest].append(source)
+        return self._inverse_links

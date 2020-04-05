@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Iterator, List, NamedTuple, Type
 
-from zendown.article import Article
+from zendown.article import Article, Interlink
 from zendown.files import FileSystem
 from zendown.project import Project
 from zendown.zfm import Context
@@ -34,7 +34,7 @@ class Builder(ABC):
         return Context(self, self.project, article)
 
     @abstractmethod
-    def resolve_article(self, ctx: Context, article: Article) -> str:
+    def resolve_link(self, ctx: Context, link: Interlink) -> str:
         """Resolve an article to a URL."""
 
     @abstractmethod
@@ -55,7 +55,7 @@ class Html(Builder):
     def article_path(self, article: Article) -> str:
         pass
 
-    def resolve_article(self, ctx: Context, article: Article) -> str:
+    def resolve_link(self, ctx: Context, link: Interlink) -> str:
         return "ARTICLE_PATH"
 
     def resolve_asset(self, ctx: Context, rel_path: str) -> str:
@@ -89,7 +89,7 @@ class Html(Builder):
         #         subdir.mkdir(exist_ok=True)
         #         go(subdir, child)
 
-        # go(self.fs.root, self.project.tree)
+        # go(self.fs.root, self.project.articles)
         # catch rendererror
 
 
@@ -97,7 +97,7 @@ class Hubspot(Builder):
 
     name = "hubspot"
 
-    def resolve_article(self, ctx: Context, article: Article) -> str:
+    def resolve_link(self, ctx: Context, link: Interlink) -> str:
         return ""
 
     def resolve_asset(self, ctx: Context, rel_path: str) -> str:
@@ -110,5 +110,3 @@ class Hubspot(Builder):
 _builder_list: List[Type[Builder]] = [Html, Hubspot]
 
 builders = {b.name: b for b in _builder_list}
-
-# TODO: builder that lists cross-references between articles?

@@ -16,7 +16,7 @@ def structure(name: str) -> Dict[str, Any]:
             "macros.py": macros_py,
             "zendown.yml": zendown_yml(name),
             "content": {"first.md": first_md},
-            "includes": {"notice.md": notice_md}
+            "includes": {"notice.md": notice_md},
             "assets": {"tiger.jpg": b64decode(tiger_jpg_base64)},
         }
     }
