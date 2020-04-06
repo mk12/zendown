@@ -1,37 +1,44 @@
 """Example Zendown macros."""
 
+# pylint: disable=redefined-builtin
+
+import builtins
 from typing import List
 
 from mistletoe.block_token import BlockToken, Paragraph
+from mistletoe.span_token import SpanToken
 
+from zendown.article import parse_sections
 from zendown.macro import Context, block_macro, inline_macro
-from zendown.section import parse_sections
 from zendown.tokens import (
     bullet_list,
     link,
     paragraph,
     raw_text,
     strong,
-    tokenize,
     transform_text,
 )
 
 
 @inline_macro
-def yell(ctx: Context, arg: str) -> str:
-    tokens = tokenize(arg)
-    transform_text(tokens, str.upper)
-    return ctx.render(tokens)
+def eval(ctx: Context, arg: str) -> str:
+    return ctx.render(raw_text(str(builtins.eval(arg))))
 
 
 @inline_macro
-def pop(ctx: Context, arg: str) -> str:
-    return ctx.render(strong(tokenize(arg)))
+def yell(ctx: Context, children: List[SpanToken]) -> str:
+    transform_text(children, str.upper)
+    return ctx.render(children)
+
+
+@inline_macro
+def pop(ctx: Context, children: List[SpanToken]) -> str:
+    return ctx.render(strong(children))
 
 
 @block_macro
 def callout(ctx: Context, arg: str, children: List[BlockToken]) -> str:
-    return f'<div class="{arg}">\n{ctx.render(children)}\n</div>'
+    return f'<div class="{arg}"><strong>{arg.capitalize()}</strong>:\n{ctx.render(children)}\n</div>'
 
 
 @block_macro

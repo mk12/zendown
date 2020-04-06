@@ -78,6 +78,8 @@ This link also works: [](first).
 
 # Intermission
 
+As we know, 2 and 4 make @eval{2 + 4}.
+
 @include{notice}
 
 # Conclusion

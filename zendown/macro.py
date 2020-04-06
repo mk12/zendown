@@ -8,6 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypeVar, Union
 
 from mistletoe.block_token import BlockToken
+from mistletoe.span_token import SpanToken, tokenize_inner
 
 from zendown.tokens import Token
 
@@ -52,7 +53,9 @@ class Kind(enum.Enum):
 
 # Allowed type signatures for macro functions.
 InlineMacroFunction = Union[
-    Callable[[Context], str], Callable[[Context, str], str],
+    Callable[[Context], str],
+    Callable[[Context, str], str],
+    Callable[[Context, List[SpanToken]], str],
 ]
 BlockMacroFunction = Union[
     Callable[[Context], str],
@@ -101,23 +104,25 @@ class Macro:
 
         arg: str
             Optional. The untokenized argument provided between braces. For
-            example, @icon{gear} would has the arg "gear". Macros can choose to
-            tokenize using zendown.tokens.tokenize if they wish.
+            example, @icon{gear} would has the arg "gear".
 
-            If the macro does not take this parameter, it is an error to provide
-            an argument when invoking the macro in an article.
+        children: List[SpanItem]
+            Optional (inline macros only). The tokenized children provided
+            between braces. Inline macros must take arg or children, not both.
+            Example:
+
+                @stylize{_This emphasis is `children[0]`_}.
 
         children: List[BlockItem]
             Optional (block macros only). The tokenized children provided in the
-            blockquote following the colon. For example:
+            blockquote following the colon. Block macros can take both arg and
+            children (or one, or neither). Example:
 
                 @tip:
                 > _This_ paragraph is `children[0]`.
 
-            If the macro does not take this parameter, it is an error to provide
-            a blockquote when invoking the macro in an article.
-
-    The function must return a string of rendered HTML.
+    The function must return a string of rendered HTML. The ctx.render function
+    is helpful for this.
     """
 
     def __init__(self, kind: Kind, function: MacroFunction):
@@ -127,19 +132,41 @@ class Macro:
         parameters = inspect.signature(function).parameters
         self.requires_arg = "arg" in parameters
         self.requires_children = "children" in parameters
-        if kind is Kind.INLINE and self.requires_children:
-            logging.error("inline macro %s should not take children", self.name)
+        if self.requires_arg:
+            ann = parameters["arg"].annotation
+            if ann and ann is not str:
+                logging.error("%s: macro arg should be str, not %s", self.name, ann)
+        if self.requires_children:
+            ann = parameters["children"].annotation
+            if kind is Kind.INLINE and ann and ann is not List[SpanToken]:
+                logging.error("%s: expected List[SpanToken], not %s", self.name, ann)
+            if kind is Kind.BLOCK and ann and ann is not List[BlockToken]:
+                logging.error("%s: expected List[BlockToken], not %s", self.name, ann)
+        if kind is Kind.INLINE and self.requires_arg and self.requires_children:
+            logging.error("%s: inline macros take arg OR children", self.name)
 
-    def __call__(self, ctx: Context, arg: str, children: List[BlockToken]) -> str:
+    def __call__(
+        self, ctx: Context, arg: str, block: Optional[List[BlockToken]]
+    ) -> str:
         arguments: Dict[str, Any] = {"ctx": ctx}
+        children: Optional[List[Token]] = block
+        if self.kind is Kind.INLINE and self.requires_children:
+            # Note: macros are executed in a rendering context, so
+            # tokenize_inner will have access to all the extra tokens.
+            children = tokenize_inner(arg)
+            arg = ""
         if self.requires_arg:
             arguments["arg"] = arg
         elif arg:
             raise MacroError(f"unexpected argument {arg!r}")
         if self.requires_children:
-            if not children:
+            if children is None:
+                # This can only happen for block macros. For inline macros, we'd
+                # at least tokenize "" which becomes [].
+                assert self.kind is Kind.BLOCK
                 raise MacroError("macro needs a blockquote")
             arguments["children"] = children
         elif children:
+            assert self.kind is Kind.BLOCK
             raise MacroError("macro does not take blockquote")
         return self.function(**arguments)

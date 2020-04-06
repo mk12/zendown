@@ -87,7 +87,7 @@ class Node(Generic[T]):
     def __init__(self, label: Label[T], ref: Ref[T], parent: Optional[Node[T]]):
         self.label = label
         self.ref = ref
-        self.parent: Optional[Node[T]] = parent
+        self.parent = parent
         self.item: Optional[T] = None
         self.children: Dict[Label[T], Node[T]] = {}
 
@@ -98,6 +98,10 @@ class Node(Generic[T]):
     def root():
         """Return the root node. All trees should use this as their root."""
         return Node(ROOT, Ref(()), None)
+
+    def is_root(self):
+        """Return true if this is the root node."""
+        return self.label is ROOT
 
     def set_item(self, item: T):
         """Set the node's item."""
@@ -155,7 +159,11 @@ class Tree(Generic[T]):
         return item
 
     def register(self, node: Node[T], item: T):
-        """Set the node's item and register the item in by_ref and by_label."""
+        """Set the node's item and register the item in by_ref and by_label.
+
+        This should only be used when constructing the tree nodes manually
+        (i.e., not using the create method).
+        """
         node.set_item(item)
         self.by_ref[node.ref] = item
         label = node.ref.parts[-1]
@@ -175,6 +183,6 @@ class Tree(Generic[T]):
 
     def first_level(self) -> Iterator[T]:
         """Iterate over the items in the first level of the tree."""
-        for child in self.root.children:
+        for child in self.root.children.values():
             if child.item is not None:
                 yield child.item

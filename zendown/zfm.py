@@ -4,32 +4,46 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, List, Optional
 
 from mistletoe import block_token, span_token
-from mistletoe.block_token import BlockToken, Document, Heading, Quote, tokenize
+from mistletoe.block_token import BlockToken, Document, HTMLBlock, Heading, Quote
 from mistletoe.html_renderer import HTMLRenderer
-from mistletoe.span_token import Image, InlineCode, Link, RawText, SpanToken
+from mistletoe.span_token import Image, HTMLSpan, InlineCode, Link, RawText, SpanToken
 
 from zendown.macro import Context, Kind, MacroError
-from zendown.tokens import link, raw_text, strip_comments
+from zendown.tokens import Token, link, raw_text, strip_comments
 
 if TYPE_CHECKING:
     # pylint: disable=cyclic-import
     from zendown.article import Article
 
 
-def parse_document(raw: str) -> Document:
-    """Parse a ZFM document."""
-    # TODO handle includes here?
-    block_token.remove_token(Heading)
-    block_token.add_token(ExtendedHeading)
-    block_token.add_token(BlockMacro)
-    span_token.add_token(InlineMacro)
-    doc = Document(raw)
-    strip_comments(doc)
+def set_zfm_tokens():
+    """Reset the mistletoe tokens to the ones ZFM token set.
+
+    Mistletoe is designed to use renderes as context managers, adding tokens on
+    entry and reseting them on exit. This doesn't work well for Zendown because
+    parsing and rendering are decoupled. We need to parse before rendering, but
+    we also might parse in the middle of rendering (in which case we don't want
+    to reset tokens immediately afterwards!). The hacky solution is just to call
+    this function before tokenizing to ensure the right tokens are there.
+    """
     block_token.reset_tokens()
     span_token.reset_tokens()
+    block_token.add_token(HTMLBlock)
+    block_token.add_token(ExtendedHeading)
+    block_token.add_token(BlockMacro)
+    span_token.add_token(HTMLSpan)
+    span_token.add_token(InlineMacro)
+
+
+def parse_document(raw: str) -> Document:
+    """Parse a ZFM document."""
+    set_zfm_tokens()
+    doc = Document(raw)
+    strip_comments(doc)
     return doc
 
 
@@ -124,7 +138,7 @@ class BlockMacro(BlockToken):
 
     def __init__(self, result):
         self.name, self.arg, self.colon, lines = result
-        super().__init__(lines, tokenize)
+        super().__init__(lines, block_token.tokenize)
 
     @classmethod
     def start(cls, line):
@@ -153,21 +167,15 @@ class ZFMRenderer(HTMLRenderer):
     """Renderer from ZFM to HTML."""
 
     def __init__(self, ctx: Context):
-        super().__init__()
+        super().__init__(ExtendedHeading, BlockMacro, InlineMacro)
         ctx.renderer = self
         self.ctx = ctx
         self.inline_code_macro = ctx.project.cfg["inline_code_macro"]
         self.smart_typography = ctx.project.cfg["smart_typography"]
         self.image_links = ctx.project.cfg["image_links"]
-        self.render_map.update(
-            {
-                ExtendedHeading.__name__: self.render_extended_heading,
-                InlineMacro.__name__: self.render_inline_macro,
-                BlockMacro.__name__: self.render_block_macro,
-            }
-        )
 
     def error(self, message: str) -> str:
+        """Log an error and render it."""
         logging.error("%s: %s", self.ctx.article.path, message)
         return self.render_error(message)
 
@@ -175,7 +183,15 @@ class ZFMRenderer(HTMLRenderer):
     def render_error(message: str) -> str:
         return f'<span style="color: red; font-weight: bold">[{message}]</span>'
 
-    def run_macro(self, name: str, arg: str, children: Any, kind: Kind) -> str:
+    def render(self, token: Token) -> str:
+        error = getattr(token, "zfm_error", None)
+        if error is not None:
+            return self.render_error(error)
+        return super().render(token)
+
+    def run_macro(
+        self, name: str, arg: str, block: Optional[List[BlockToken]], kind: Kind
+    ) -> str:
         macro = self.ctx.project.get_macro(name)
         if not macro:
             return self.error(f"{name}: undefined macro")
@@ -184,7 +200,7 @@ class ZFMRenderer(HTMLRenderer):
             called = kind.name.lower()
             return self.error(f"{name}: {actual} macro invoked as {called} macro")
         try:
-            return macro(self.ctx, arg, children)
+            return macro(self.ctx, arg, block)
         except MacroError as ex:
             return self.error(f"{name}: {ex}")
 
@@ -198,18 +214,25 @@ class ZFMRenderer(HTMLRenderer):
         return super().render_inline_code(token)
 
     def render_block_macro(self, token: BlockMacro) -> str:
-        children = None
+        block = None
         if token.children:
             assert isinstance(token.children[0], Quote)
-            children = token.children[0].children
+            block = token.children[0].children
         elif token.colon:
             return self.error(f"{token.name}: missing blockquote after colon")
-        return self.run_macro(token.name, token.arg, children, Kind.BLOCK)
+        if token.name == "include":
+            if token.children:
+                return self.error("include: macro does not take blockquote")
+            doc = token.zfm_include.doc
+            return self.render_inner(doc)
+        return self.run_macro(token.name, token.arg, block, Kind.BLOCK)
 
     def render_extended_heading(self, token: Heading) -> str:
         template = '<h{level} id="{id}">{inner}</h{level}>'
+        # TODO don't hardcode
+        level = min(6, token.level + 1)
         inner = self.render_inner(token)
-        return template.format(level=token.level, id=token.identifier, inner=inner)
+        return template.format(level=level, id=token.identifier, inner=inner)
 
     def render_raw_text(self, token: RawText) -> str:
         if self.smart_typography:
@@ -217,24 +240,19 @@ class ZFMRenderer(HTMLRenderer):
         return super().render_raw_text(token)
 
     def render_link(self, token: Link) -> str:
-        if not token.target:
-            return self.error("invalid empty link")
-        internal_link = getattr(token, "internal_link", None)
-        if internal_link:
-            if internal_link.error:
-                return self.render_error(internal_link.error)
-            token.target = self.ctx.builder.resolve_link(self.ctx, internal_link)
+        interlink = getattr(token, "zfm_interlink", None)
+        if interlink:
+            token.target = self.ctx.builder.resolve_link(self.ctx, interlink)
             if not token.children:
-                token.children = [raw_text(internal_link.article.cfg["title"])]
+                token.children = [raw_text(interlink.article.cfg["title"])]
         return super().render_link(token)
 
     def render_image(self, token: Image) -> str:
         if not getattr(token, "zfm_image_processed", False):
             token.zfm_image_processed = True
-            if not (
-                token.src.startswith("http://") or token.src.startswith("https://")
-            ):
-                token.src = self.ctx.builder.resolve_asset(self.ctx, token.src)
+            asset = getattr(token, "zfm_asset", None)
+            if asset:
+                token.src = self.ctx.builder.resolve_asset(self.ctx, asset)
             if self.image_links:
                 return super().render_link(link(token.src, [token]))
         return super().render_image(token)

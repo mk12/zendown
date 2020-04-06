@@ -2,22 +2,11 @@
 
 from typing import Callable, List, Union
 
-from mistletoe import block_token, span_token
+from mistletoe import block_token
 from mistletoe.block_token import BlockToken, HTMLBlock, ListItem, Paragraph
 from mistletoe.span_token import Emphasis, HTMLSpan, Link, RawText, SpanToken, Strong
 
 Token = Union[SpanToken, BlockToken]
-
-
-def tokenize(raw: Union[str, List[str]]) -> List[Token]:
-    """Tokenize raw input.
-
-    If raw is a list of lines, it tokenizes at the block level. Otherwise (raw
-    is a string), it tokenizes at the span level.
-    """
-    if isinstance(raw, list):
-        return block_token.tokenize(raw)
-    return span_token.tokenize_inner(raw)
 
 
 def walk(tokens: Union[Token, List[Token]], f: Callable[[Token], None]):

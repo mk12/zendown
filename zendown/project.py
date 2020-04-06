@@ -6,15 +6,14 @@ import importlib.util
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional
+from typing import Dict, Iterator, List, Optional, TypeVar
 
 from zendown.article import Article
-from zendown.asset import Asset
 from zendown.config import Config
 from zendown.files import FileSystem
-from zendown.include import Include
 from zendown.logs import fatal
 from zendown.macro import Macro
+from zendown.resource import Asset, Include, Resource
 from zendown.tree import Label, Ref, Tree
 
 
@@ -31,6 +30,9 @@ class ProjectConfig(Config):
     }
 
 
+T = TypeVar("T", bound=Resource)
+
+
 class Project:
 
     """A Zendown project.
@@ -40,13 +42,17 @@ class Project:
 
     Projects should be created via Project.find(). This will:
 
-        * Load the configuration file.
-        * Load the macros files.
-        * Scan the articles.
+    * Load the configuration file.
+    * Load the macros files.
+    * Scan the articles.
 
     Scanning articles only implies locating the files. None of the article files
-    will be read until Article.load is called (by a Builder). Assets and
-    include files are locating on demand by get_asset and get_include.
+    will be read until Article.load is called (by a Builder). Assets and include
+    files are locating on demand by get_asset and get_include.
+
+    The rationale for scanning all articles eagerly is that articles can link to
+    others by label (rather than full ref), and macros/builders might wish to
+    explore the entire article tree.
     """
 
     def __init__(self, fs: FileSystem, cfg: ProjectConfig):
@@ -111,7 +117,11 @@ class Project:
         if include:
             return include
         parts = (str(p) for p in ref.parts)
-        path = self.fs.file(Path("includes").joinpath(*parts).with_suffix(".md"))
+        rel_path = Path("includes").joinpath(*parts)
+        if rel_path.suffix:
+            logging.error("include path %r incorrectly has extension", rel_path)
+            return None
+        path = self.fs.file(rel_path.with_suffix(".md"))
         if not path:
             return None
         logging.debug("found include file at %s", path)
@@ -129,7 +139,7 @@ class Project:
                 file_path = path / name
                 if file_path.suffix != ".md":
                     continue
-                relative = file_path.relative_to(content_dir)
+                relative = file_path.relative_to(content_dir).with_suffix("")
                 ref: Ref[Article] = Ref(tuple(Label(p) for p in relative.parts))
                 self.articles.create(ref, Article, file_path)
                 logging.debug("found article at %s", file_path)
@@ -138,7 +148,7 @@ class Project:
         """Iterate over articles whose refs have the given substring."""
         for ref, article in self.articles.by_ref.items():
             if substr in str(ref):
-                logging.debug("query %r matched article %r", substr, ref)
+                logging.debug("query %r matched article %s", substr, ref)
                 yield article
 
     @property
@@ -149,14 +159,13 @@ class Project:
         """
         if self._inverse_links is None:
             self._inverse_links = {}
+            for article in self.articles:
+                self._inverse_links[article] = []
             for source in self.articles:
-                source.ensure_loaded()
                 source.ensure_resolved(self)
                 for link in source.links:
                     dest = link.article
                     if dest is source:
                         continue
-                    if dest not in self._inverse_links:
-                        self._inverse_links[dest] = []
                     self._inverse_links[dest].append(source)
         return self._inverse_links

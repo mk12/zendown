@@ -4,23 +4,97 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Container, Dict, List, Optional, cast
+from typing import TYPE_CHECKING, Callable, Container, Dict, List, Optional, Set, cast
 
-from mistletoe.block_token import Document, Heading
+from mistletoe.block_token import BlockToken, Document, Heading
 from mistletoe.span_token import Image, Link
 from slugify import slugify
 
-from zendown.asset import Asset
 from zendown.config import Config
-from zendown.include import Include
-from zendown.section import Anchor, Section, parse_sections
+from zendown.resource import Asset, Include, Resource
 from zendown.tokens import Token, collect_text, walk
-from zendown.tree import Label, Node, Ref, Tree
-from zendown.zfm import Context, ZFMRenderer, parse_document
+from zendown.tree import COLLISION, Label, Node, Ref, Tree
+from zendown.zfm import BlockMacro, Context, ZFMRenderer, parse_document
 
 if TYPE_CHECKING:
     # pylint: disable=cyclic-import
     from zendown.project import Project
+
+
+class Section:
+
+    """A section within an article body.
+
+    A section comprises a heading and a list of blocks. The heading can be any
+    level (H1 to H6). The section stores blocks up until the next heading of
+    equal or lower level (i.e. same or bigger font).
+
+    This class is useful for manipulating article content, since the mistletoe
+    tokenization is flat with respect to headings.
+    """
+
+    def __init__(self, heading: Heading, node: Node[Section]):
+        self.heading = heading
+        self.node = node
+        self.blocks: List[BlockToken] = []
+
+
+# Sections form a tree, but we refer to them by Label rather than Ref because
+# they must have unique labels (since they are used for the HTML id attribute).
+Anchor = Label[Section]
+
+
+# A function that generates a label for a heading, given the set of used labels.
+GenLabelFn = Callable[[Heading, Container[Anchor]], Anchor]
+
+
+def parse_sections(
+    tokens: List[BlockToken], gen_label: Optional[GenLabelFn] = None
+) -> Tree[Section]:
+    """Parse tokens into a tree of sections.
+
+    If gen_label is provided, it will be used to generate labels in the tree.
+    Otherwise, unspecified integers will be used.
+    """
+    if not gen_label:
+        gen_label = lambda heading, used: Label(str(id(heading)))
+    tree: Tree[Section] = Tree()
+    parent = tree.root
+    blocks = []
+    node = None
+    used: Set[Anchor] = set()
+    for token in tokens:
+        if not isinstance(token, Heading):
+            blocks.append(token)
+            continue
+        if node:
+            node.item.blocks = blocks
+        blocks = []
+        label = gen_label(token, used)
+        used.add(label)
+        if node and token.level > node.item.heading.level:
+            parent = node
+        else:
+            while parent.item and token.level <= parent.item.heading.level:
+                assert parent.parent
+                parent = parent.parent
+        node = parent.add_child(label)
+        tree.register(node, Section(token, node))
+    if node:
+        assert node.item
+        node.item.blocks = blocks
+
+    # At this point, the Section objects only store the blocks up to the
+    # next heading. Extend them to cover all the blocks in their subtree.
+    def extend_blocks(node: Node[Section]) -> List[BlockToken]:
+        assert node.item
+        for child in node.children.values():
+            node.item.blocks.extend(extend_blocks(child))
+        return [node.item.heading] + node.item.blocks
+
+    for node in tree.root.children.values():
+        extend_blocks(node)
+    return tree
 
 
 class Interlink:
@@ -56,7 +130,11 @@ class ArticleConfig(Config):
     }
 
 
-class Article:
+class ResolveError(Exception):
+    """An error that occurs during article resolution."""
+
+
+class Article(Resource):
 
     """An article written in ZFM with a YAML configuration header.
 
@@ -70,46 +148,24 @@ class Article:
     4. Resolved: Externa; resources have been resolved within the project
        (self.links, self.assets, self.includes).
 
-    Loading and resolving must be done explicitly. After loading, the properties
-    self.doc, self.sections, and self.anchors will automatically perform parsing
-    if it has not been done yet.
-
     Rendering to HTML can be considered a final step after resolving, but the
     rendered results are not stored in the object.
     """
 
     def __init__(self, path: Path, node: Node[Article]):
-        """Create a new article at the given filesystem path and tree node."""
-        self.path = path
-        self.node = node
+        super().__init__(path, node)
         self.cfg: Optional[ArticleConfig] = None
         self.raw: Optional[str] = None
         self._doc: Optional[Document] = None
         self._sections: Optional[Tree[Section]] = None
-        self._anchors: Optional[Dict[Anchor, Section]] = None
         self._links: Optional[List[Interlink]] = None
         self._assets: Optional[List[Asset]] = None
         self._includes: Optional[List[Include]] = None
 
-    def __repr__(self) -> str:
-        return f"Article(ref={self.node.ref!r}, path={self.path!r})"
-
     def is_loaded(self) -> bool:
-        """Return true if the article has been loaded."""
         return self.raw is not None
 
-    def ensure_loaded(self):
-        """Load the article if it is not already loaded."""
-        if not self.is_loaded():
-            self.load()
-
-    def load(self):
-        """Load the article from disk.
-
-        This sets self.cfg (parsed configuration) and self.raw (raw, unparsed
-        body of the article).
-        """
-        logging.info("loading article %r from %s", self.node.ref, self.path)
+    def _load(self):
         with open(self.path) as f:
             head = ""
             for line in f:
@@ -120,29 +176,18 @@ class Article:
         default_slug = slugify(self.path.with_suffix("").name)
         self.cfg = ArticleConfig.loads(self.path, head)
         self.cfg.validate(slug=default_slug)
-        logging.debug("article %r config: %r", self.node.ref, self.cfg)
+        logging.debug("article %s config: %r", self.node.ref, self.cfg)
         self.raw = body
         self._doc = None
         self._sections = None
-        self._anchors = None
 
     def is_parsed(self) -> bool:
-        """Return true if the article has been loaded and parsed."""
         return self._doc is not None
 
-    def parse(self):
-        """Parse the loaded ZFM body.
-
-        Unlike loading, this does not need to be called manually. It will happen
-        on demand when properties are accessed.
-        """
-        assert self.is_loaded()
-        logging.info("parsing article %r", self.node.ref)
+    def _parse(self):
         assert self.raw is not None
         self._doc = parse_document(self.raw)
         self._sections = parse_sections(self._doc.children, self.gen_heading_label)
-        # Cast since we know there will be no collisions.
-        self._anchors = self._sections.by_unique_label
 
     def gen_heading_label(self, heading: Heading, used: Container[Anchor]) -> Anchor:
         """Choose a label for the heading that is not already used."""
@@ -164,69 +209,98 @@ class Article:
     @property
     def doc(self) -> Document:
         """Return the tokenized Markdown document."""
-        if not self.is_parsed():
-            self.parse()
+        self.ensure_parsed()
+        assert self._doc is not None
         return self._doc
 
     @property
     def sections(self) -> Tree[Section]:
         """Return the tree of sections in the article."""
-        if not self.is_parsed():
-            self.parse()
+        self.ensure_parsed()
         assert self._sections is not None
         return self._sections
 
     @property
     def anchors(self) -> Dict[Anchor, Section]:
         """Return a mapping from anchors to sections (all levels)."""
-        if not self.is_parsed():
-            self.parse()
-        assert self._anchors is not None
-        return self._anchors
+        return self.sections.by_unique_label
 
     def is_resolved(self) -> bool:
-        """Return true if the article has been loaded, parsed, and resolved."""
         return self._links is not None
 
-    def ensure_resolved(self, project: Project):
-        """Resolve the article if it is not already resolved."""
-        if not self.is_resolved():
-            self.resolve(project)
-
-    def resolve(self, project: Project):
-        """Resolve the parsed article within the project."""
-        assert self.is_parsed()
-        logging.info("resolving article %r", self.node.ref)
+    def _resolve(self, project: Project):
         self._links = []
         self._assets = []
         self._includes = []
 
         def visit(token: Token):
-            pass
-            # if isinstance(token, Link):
-            #     if not token.target or "." in token.target:
-            #         return
-            #     path, anchor = token.target, ""
-            #     if "#" in path:
-            #         path, anchor = path.split("#", 1)
-            #     article: Optional[Article] = None
-            #     if path == "":
-            #         article = self
-            #     elif path.startswith("/"):
-            #         ref: Ref[Article] = Ref.parse(path)
-            #         article = project.articles_by_ref.get(ref)
-            #     elif "/" not in path:
-            #         label: Label[Article] = Label(path)
-            #         maybe_article = self.ctx.project.articles_by_label.get(label)
-            #         if maybe_article is COLLISION:
-            #             return self.error(f"ambiguous article name {path!r}")
-            #         article = cast(Optional["Article"], maybe_article)
-            #     # if not article:
-            #     # link = Interlink(article, section)
-            # elif isinstance(token, Image):
-            #     pass
+            try:
+                if isinstance(token, Link):
+                    link = self.resolve_link(token.target, project)
+                    if link:
+                        token.zfm_interlink = link
+                        assert self._links is not None
+                        self._links.append(link)
+                elif isinstance(token, Image):
+                    asset = self.resolve_asset(token.src, project)
+                    if asset:
+                        token.zfm_asset = asset
+                        assert self._assets is not None
+                        self._assets.append(asset)
+                elif isinstance(token, BlockMacro) and token.name == "include":
+                    include = self.resolve_include(token.arg, project)
+                    if include:
+                        token.zfm_include = include
+                        assert self._includes is not None
+                        self._includes.append(include)
+            except ResolveError as ex:
+                message = str(ex)
+                logging.error("%s: %s", self.path, message)
+                token.zfm_error = message
 
         walk(self._doc, visit)
+
+    def resolve_link(self, url: str, project: Project) -> Optional[Interlink]:
+        """Resolve an article link in the project."""
+        if not url or "." in url:
+            return None
+        path, anchor = url, ""
+        if "#" in path:
+            path, anchor = path.split("#", 1)
+        article: Optional[Article] = None
+        if path == "":
+            article = self
+        elif path.startswith("/"):
+            ref: Ref[Article] = Ref.parse(path)
+            article = project.articles.by_ref.get(ref)
+        elif "/" not in path:
+            label: Label[Article] = Label(path)
+            maybe_article = project.articles.by_label.get(label)
+            if maybe_article is COLLISION:
+                raise ResolveError(f"ambiguous article reference {path!r}")
+            article = cast(Optional["Article"], maybe_article)
+        if not article:
+            raise ResolveError(f"invalid article reference {path!r}")
+        section = None
+        if anchor:
+            section = article.anchors.get(Label(anchor))
+            if not section:
+                raise ResolveError(
+                    f"invalid anchor #{anchor} for article {article.node.ref}"
+                )
+        return Interlink(article, section)
+
+    def resolve_asset(self, url: str, project: Project) -> Optional[Asset]:
+        """Resolve an asset in the project."""
+        if url.startswith("http://") or url.startswith("https://"):
+            return None
+        ref: Ref[Asset] = Ref.parse("/" + url)
+        return project.get_asset(ref)
+
+    def resolve_include(self, path: str, project: Project) -> Optional[Include]:
+        """Resolve an include in the project."""
+        ref: Ref[Include] = Ref.parse("/" + path)
+        return project.get_include(ref)
 
     @property
     def links(self) -> List[Interlink]:
@@ -251,5 +325,6 @@ class Article:
 
     def render_html(self, ctx: Context):
         """Render from ZFM Markdown to HTML."""
+        assert self.is_resolved()
         with ZFMRenderer(ctx) as renderer:
             return renderer.render(self.doc)

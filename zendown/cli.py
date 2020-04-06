@@ -125,7 +125,7 @@ def command_info(args: Namespace):
     project = Project.find()
     printer = InfoPrinter()
     for article in project.query(args.query):
-        article.ensure_loaded()
+        article.ensure_resolved(project)
         assert article.cfg
         printer.topic(article.node.ref)
         printer.heading("Title")
@@ -146,11 +146,11 @@ def command_info(args: Namespace):
         if args.assets:
             printer.heading("Assets")
             for asset in article.assets:
-                printer.item(asset.path)
+                printer.item(asset.node.ref)
         if args.includes:
             printer.heading("Includes")
             for include in article.includes:
-                printer.item(include.path)
+                printer.item(include.node.ref)
 
 
 class InfoPrinter:
@@ -166,10 +166,8 @@ class InfoPrinter:
         self.first = False
         print(s)
 
-    @staticmethod
-    def heading(s: Any):
+    def heading(self, s: Any):
         print(f"\n    {s}:")
 
-    @staticmethod
-    def item(s: Any):
+    def item(self, s: Any):
         print(f"    {s}")
