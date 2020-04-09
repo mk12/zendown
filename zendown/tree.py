@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import sys
 from typing import (
     Any,
@@ -53,9 +54,15 @@ class Ref(Generic[T]):
         self.parts = parts
 
     @staticmethod
-    def parse(s: str) -> Ref[T]:
-        assert len(s) >= 1 and s[0] == "/"
-        return Ref(tuple(Label(p) for p in s[1:].split("/")))
+    def parse(s: str, leading_slash: bool = True) -> Ref[T]:
+        if leading_slash:
+            assert len(s) >= 1 and s[0] == "/"
+            s = s[1:]
+        return Ref(tuple(Label(p) for p in s.split("/")))
+
+    @property
+    def path(self) -> Path:
+        return Path("/".join(str(label) for label in self.parts))
 
     def __repr__(self) -> str:
         return "/" + "/".join(str(label) for label in self.parts)

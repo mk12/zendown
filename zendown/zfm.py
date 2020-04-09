@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import logging
 import re
-from contextlib import contextmanager
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List, NamedTuple, Optional
 
 from mistletoe import block_token, span_token
-from mistletoe.block_token import BlockToken, Document, HTMLBlock, Heading, Quote
+from mistletoe.block_token import BlockToken, Document, Heading, HTMLBlock, Quote
 from mistletoe.html_renderer import HTMLRenderer
-from mistletoe.span_token import Image, HTMLSpan, InlineCode, Link, RawText, SpanToken
+from mistletoe.span_token import HTMLSpan, Image, InlineCode, Link, RawText, SpanToken
 
 from zendown.macro import Context, Kind, MacroError
 from zendown.tokens import Token, link, raw_text, strip_comments
@@ -162,14 +161,22 @@ class BlockMacro(BlockToken):
         return cls.name, cls.arg, cls.colon, line_buffer
 
 
+class RenderOptions(NamedTuple):
+
+    """Options for rendering ZFM."""
+
+    shift_headings_by: int = 0
+
+
 class ZFMRenderer(HTMLRenderer):
 
     """Renderer from ZFM to HTML."""
 
-    def __init__(self, ctx: Context):
+    def __init__(self, ctx: Context, options: RenderOptions):
         super().__init__(ExtendedHeading, BlockMacro, InlineMacro)
         ctx.renderer = self
         self.ctx = ctx
+        self.options = options
         self.inline_code_macro = ctx.project.cfg["inline_code_macro"]
         self.smart_typography = ctx.project.cfg["smart_typography"]
         self.image_links = ctx.project.cfg["image_links"]
@@ -229,8 +236,7 @@ class ZFMRenderer(HTMLRenderer):
 
     def render_extended_heading(self, token: Heading) -> str:
         template = '<h{level} id="{id}">{inner}</h{level}>'
-        # TODO don't hardcode
-        level = min(6, token.level + 1)
+        level = max(1, min(6, token.level + self.options.shift_headings_by))
         inner = self.render_inner(token)
         return template.format(level=level, id=token.identifier, inner=inner)
 

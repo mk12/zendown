@@ -137,7 +137,7 @@ class Project:
             path = Path(path_str)
             for name in files:
                 file_path = path / name
-                if file_path.suffix != ".md":
+                if file_path.suffix not in (".md", ".yml"):
                     continue
                 relative = file_path.relative_to(content_dir).with_suffix("")
                 ref: Ref[Article] = Ref(tuple(Label(p) for p in relative.parts))

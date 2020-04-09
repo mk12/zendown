@@ -1,0 +1,27 @@
+{% extends "base.html.jinja" %}
+
+{% block content %}
+{% if not root %}
+<a href="../index.html">Go up</a>
+{% endif %}
+
+<h1>{{ title }}</h1>
+
+{% if sections %}
+<h2>Sections</h2>
+<ul>
+{% for node in sections %}
+    <li><a href="{{ node.label }}/index.html">{{ node.label | capitalize }}</a></li>
+{% endfor %}
+</ul>
+{% endif %}
+
+{% if articles %}
+<h2>Articles</h2>
+<ul>
+{% for node in articles %}
+    <li><a href="{{ node.label }}.html">{{ node.item.cfg["title"] }}</a></li>
+{% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

@@ -14,7 +14,7 @@ from zendown.config import Config
 from zendown.resource import Asset, Include, Resource
 from zendown.tokens import Token, collect_text, walk
 from zendown.tree import COLLISION, Label, Node, Ref, Tree
-from zendown.zfm import BlockMacro, Context, ZFMRenderer, parse_document
+from zendown.zfm import BlockMacro, ZFMRenderer, parse_document
 
 if TYPE_CHECKING:
     # pylint: disable=cyclic-import
@@ -138,6 +138,10 @@ class Article(Resource):
 
     """An article written in ZFM with a YAML configuration header.
 
+    Normal articles should have a .md extension and a "---" line to separate
+    configuration from body. Config-only articles should have an .yml extension
+    and consist only of YAML.
+
     An article can be in one of four states:
 
     1. Initialized: Only self.path and self.node are set.
@@ -154,6 +158,7 @@ class Article(Resource):
 
     def __init__(self, path: Path, node: Node[Article]):
         super().__init__(path, node)
+        self.cfg_only = path.suffix == ".yml"
         self.cfg: Optional[ArticleConfig] = None
         self.raw: Optional[str] = None
         self._doc: Optional[Document] = None
@@ -170,8 +175,13 @@ class Article(Resource):
             head = ""
             for line in f:
                 if line.rstrip() == "---":
+                    if self.cfg_only:
+                        logging.error("article %s should be .md, not .yml", self.path)
                     break
                 head += line
+            else:
+                if not self.cfg_only:
+                    logging.error("article %s should be .yml, not .md", self.path)
             body = f.read()
         default_slug = slugify(self.path.with_suffix("").name)
         self.cfg = ArticleConfig.loads(self.path, head)
@@ -294,12 +304,12 @@ class Article(Resource):
         """Resolve an asset in the project."""
         if url.startswith("http://") or url.startswith("https://"):
             return None
-        ref: Ref[Asset] = Ref.parse("/" + url)
+        ref: Ref[Asset] = Ref.parse(url, leading_slash=False)
         return project.get_asset(ref)
 
     def resolve_include(self, path: str, project: Project) -> Optional[Include]:
         """Resolve an include in the project."""
-        ref: Ref[Include] = Ref.parse("/" + path)
+        ref: Ref[Include] = Ref.parse(path, leading_slash=False)
         return project.get_include(ref)
 
     @property
@@ -323,8 +333,7 @@ class Article(Resource):
         assert self._includes is not None
         return self._includes
 
-    def render_html(self, ctx: Context):
+    def render(self, renderer: ZFMRenderer):
         """Render from ZFM Markdown to HTML."""
         assert self.is_resolved()
-        with ZFMRenderer(ctx) as renderer:
-            return renderer.render(self.doc)
+        return renderer.render(self.doc)

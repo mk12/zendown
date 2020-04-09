@@ -38,7 +38,12 @@ def pop(ctx: Context, children: List[SpanToken]) -> str:
 
 @block_macro
 def callout(ctx: Context, arg: str, children: List[BlockToken]) -> str:
-    return f'<div class="{arg}"><strong>{arg.capitalize()}</strong>:\n{ctx.render(children)}\n</div>'
+    label = strong([raw_text(arg.capitalize())])
+    if len(children) >= 1 and isinstance(children[0], Paragraph):
+        children[0].children[0:0] = [label, raw_text(": ")]
+    else:
+        children.insert(0, paragraph([label, raw_text(":")]))
+    return f'<div class="{arg}">\n{ctx.render(children)}\n</div>'
 
 
 @block_macro
@@ -47,8 +52,13 @@ def note(ctx: Context, children: List[BlockToken]) -> str:
 
 
 @block_macro
-def warning(ctx: Context, children: List[BlockToken]) -> str:
-    return callout(ctx, "warning", children)
+def tip(ctx: Context, children: List[BlockToken]) -> str:
+    return callout(ctx, "tip", children)
+
+
+@block_macro
+def caution(ctx: Context, children: List[BlockToken]) -> str:
+    return callout(ctx, "caution", children)
 
 
 @block_macro

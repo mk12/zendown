@@ -1,17 +1,21 @@
 """Build targets for projects."""
 
 import logging
-from abc import ABC, abstractmethod
 import os.path
+from abc import ABC, abstractmethod
+from importlib import resources
 from pathlib import Path
 from typing import Iterator, List, NamedTuple, Set, TextIO, Type
+
+from jinja2 import Environment, PackageLoader, select_autoescape
 
 from zendown.article import Article, Interlink
 from zendown.files import FileSystem
 from zendown.project import Project
 from zendown.resource import Asset
+from zendown import templates
 from zendown.tree import Node, Ref
-from zendown.zfm import Context
+from zendown.zfm import Context, RenderOptions, ZFMRenderer
 
 
 class Options(NamedTuple):
@@ -49,61 +53,47 @@ class Builder(ABC):
         """Build the given articles."""
 
 
-CSS_STYLE = """
-body {
-    margin: 5% auto;
-    background: #f2f2f2;
-    color: #444444;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    font-size: 16px;
-    line-height: 1.8;
-    max-width: 73%;
-}
-a {
-    border-bottom: 1px solid #444444;
-    color: #444444;
-    text-decoration: none;
-}
-a:hover {
-    border-bottom: 0;
-}
-.note, .tip, .warning {
-    background: #cff2ff;
-    padding: 10px 10px 1px;
-}
-"""
-
-
 class Html(Builder):
 
     """Builds HTML web pages for direct browsing (no server needed)."""
 
     name = "html"
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.env = Environment(
+            loader=PackageLoader("zendown", "templates"),
+            autoescape=select_autoescape(["html"]),
+        )
+        self.css = resources.open_text(templates, "style.css").read()
+        self.index_template = self.env.get_template("index.html.jinja")
+        self.article_template = self.env.get_template("article.html.jinja")
+
     def article_path(self, article: Article) -> Path:
-        return self.fs.join(Path(str(article.node.ref)[1:]).with_suffix(".html"))
+        return self.fs.join(article.node.ref.path.with_suffix(".html"))
 
     def index_path(self, ref: Ref[Article]) -> Path:
-        return self.fs.join(Path(str(ref)[1:]) / "index.html")
+        return self.fs.join(ref.path / "index.html")
 
     def resolve_link(self, ctx: Context, link: Interlink) -> str:
-        source = self.article_path(ctx.article)
+        source = self.article_path(ctx.article).parent
         dest = self.article_path(link.article)
         rel = os.path.relpath(dest, source)
         if rel == ".":
             return "#"
+        if link.section:
+            return f"{rel}#{link.section.node.label}"
         return rel
 
     def resolve_asset(self, ctx: Context, asset: Asset) -> str:
         path = asset.path
         if not self.project.fs.join(path).exists():
             logging.error("%s: asset %s does not exist", ctx.article.path, path)
-        ref = ctx.article.node.ref
-        assert ref
-        to_root = "../" * (1 + len(ref.parts))
-        return to_root + str(path)
+        return self.relative_base(ctx.article.node, 1) + str(path)
 
     def build(self, articles: Iterator[Article]):
+        with open(self.fs.join("style.css"), "w") as f:
+            f.write(self.css)
         parents: List[Node] = []
         for article in articles:
             if article.node.parent is not None:
@@ -127,77 +117,31 @@ class Html(Builder):
 
     def write_article(self, article: Article, out: TextIO):
         article.ensure_loaded()
-        assert article.cfg is not None
-        title = article.cfg["title"]
         ctx = self.context(article)
-        body = article.render_html(ctx)
-        print(
-            f"""
-<html>
-<head>
-<meta charset="utf-8">
-<title>{title}</title>
-<style>
-{CSS_STYLE}
-</style>
-</head>
-<body>
-<a href="index.html">Index</a>
-<h1>{title}</h1>
-{body}
-</body>
-</html>
-""",
-            file=out,
-        )
+        with ZFMRenderer(ctx, RenderOptions(shift_headings_by=1)) as r:
+            body = article.render(r)
+        assert article.cfg is not None
+        vals = {
+            "base": self.relative_base(article.node, -1),
+            "title": article.cfg["title"],
+            "body": body,
+        }
+        out.write(self.article_template.render(**vals))
 
     def write_index(self, node: Node, out: TextIO):
         root = node.is_root()
-        title = self.project.name if root else str(node.ref.parts[-1]).capitalize()
-        print(
-            f"""
-<html>
-<head>
-<meta charset="utf-8">
-<title>{title}</title>
-<style>
-{CSS_STYLE}
-</style>
-</head>
-<body>
-{'<a href="../index.html">Go up</a>' if not root else ''}
-<h1>{title}</h1>
-""",
-            file=out,
-        )
-        if any(n.children for n in node.children.values()):
-            print("<h2>Sections</h2>\n<ul>", file=out)
-            for n in node.children.values():
-                if not n.children:
-                    continue
-                print(
-                    f"""
-<li><a href="{n.label}/index.html">{str(n.label).capitalize()}</a></li>
-""",
-                    file=out,
-                )
-            print("</ul>", file=out)
+        vals = {
+            "base": self.relative_base(node),
+            "root": root,
+            "title": self.project.name if root else str(node.ref.parts[-1]).capitalize(),
+            "sections": [n for n in node.children.values() if n.children],
+            "articles": [n for n in node.children.values() if n.item],
+        }
+        out.write(self.index_template.render(**vals))
 
-        if any(n.item for n in node.children.values()):
-            print("<h3>Articles</h3>\n<ul>", file=out)
-            for n in node.children.values():
-                article = n.item
-                if not article:
-                    continue
-                print(
-                    f"""
-<li><a href="{n.label}.html">{article.cfg["title"]}</a></li>
-""",
-                    file=out,
-                )
-            print("</ul>", file=out)
-
-        print("</body>\n</html>", file=out)
+    @staticmethod
+    def relative_base(node: Node, adjust: int = 0) -> str:
+        return "../" * (len(node.ref.parts) + adjust)
 
 
 class Hubspot(Builder):
