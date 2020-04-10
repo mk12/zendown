@@ -6,7 +6,7 @@ import importlib.util
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, TypeVar
+from typing import Dict, Iterable, Iterator, List, Optional, TypeVar
 
 from zendown.article import Article
 from zendown.config import Config
@@ -143,6 +143,16 @@ class Project:
                 ref: Ref[Article] = Ref(tuple(Label(p) for p in relative.parts))
                 self.articles.create(ref, Article, file_path)
                 logging.debug("found article at %s", file_path)
+
+    def all_articles(self) -> Iterable[Article]:
+        """Iterate over all articles in the project."""
+        return self.articles.by_ref.values()
+
+    def all_resouces(self) -> Iterator[Resource]:
+        """Iterate over all resources in the project."""
+        yield from self.articles.by_ref.values()
+        yield from self.assets.by_ref.values()
+        yield from self.includes.by_ref.values()
 
     def query(self, substr: str) -> Iterator[Article]:
         """Iterate over articles whose refs have the given substring."""

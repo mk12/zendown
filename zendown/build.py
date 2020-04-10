@@ -5,7 +5,8 @@ import os.path
 from abc import ABC, abstractmethod
 from importlib import resources
 from pathlib import Path
-from typing import Iterator, List, NamedTuple, Set, TextIO, Type
+from shutil import rmtree
+from typing import Iterable, List, NamedTuple, Set, TextIO, Type
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
@@ -33,24 +34,45 @@ class Builder(ABC):
         self.project = project
         self.options = options
         out_dir = project.fs.join(Path("out") / self.name)
-        out_dir.mkdir(parents=True, exist_ok=True)
         self.fs = FileSystem(out_dir)
+
+    def clean(self):
+        """Delete the contents of the output directory."""
+        rmtree(self.fs.root)
 
     def context(self, article: Article) -> Context:
         """Return a Context object for macros in an article."""
         return Context(self, self.project, article)
 
-    @abstractmethod
     def resolve_link(self, ctx: Context, link: Interlink) -> str:
         """Resolve an article to a URL."""
+        url = self._resolve_link(ctx, link)
+        logging.debug("resolved link %s to %s", link, url)
+        return url
 
-    @abstractmethod
     def resolve_asset(self, ctx: Context, asset: Asset) -> str:
         """Resolve an asset to a URL."""
+        url = self._resolve_asset(ctx, asset)
+        logging.debug("resolved asset %s to %s", asset, url)
+        return url
+
+    def build(self, articles: Iterable[Article]):
+        """Build the given articles."""
+        logging.info("building target %s", self.name)
+        self.fs.root.mkdir(parents=True, exist_ok=True)
+        self._build(articles)
 
     @abstractmethod
-    def build(self, articles: Iterator[Article]):
-        """Build the given articles."""
+    def _resolve_link(self, ctx: Context, link: Interlink) -> str:
+        ...
+
+    @abstractmethod
+    def _resolve_asset(self, ctx: Context, asset: Asset) -> str:
+        ...
+
+    @abstractmethod
+    def _build(self, articles: Iterable[Article]):
+        ...
 
 
 class Html(Builder):
@@ -68,6 +90,9 @@ class Html(Builder):
         self.css = resources.open_text(templates, "style.css").read()
         self.index_template = self.env.get_template("index.html.jinja")
         self.article_template = self.env.get_template("article.html.jinja")
+        assets = self.fs.join("assets")
+        if not assets.exists():
+            assets.symlink_to(self.project.fs.join("assets"), target_is_directory=True)
 
     def article_path(self, article: Article) -> Path:
         return self.fs.join(article.node.ref.path.with_suffix(".html"))
@@ -75,7 +100,7 @@ class Html(Builder):
     def index_path(self, ref: Ref[Article]) -> Path:
         return self.fs.join(ref.path / "index.html")
 
-    def resolve_link(self, ctx: Context, link: Interlink) -> str:
+    def _resolve_link(self, ctx: Context, link: Interlink) -> str:
         source = self.article_path(ctx.article).parent
         dest = self.article_path(link.article)
         rel = os.path.relpath(dest, source)
@@ -85,13 +110,13 @@ class Html(Builder):
             return f"{rel}#{link.section.node.label}"
         return rel
 
-    def resolve_asset(self, ctx: Context, asset: Asset) -> str:
+    def _resolve_asset(self, ctx: Context, asset: Asset) -> str:
         path = asset.path
         if not self.project.fs.join(path).exists():
             logging.error("%s: asset %s does not exist", ctx.article.path, path)
-        return self.relative_base(ctx.article.node, 1) + str(path)
+        return self.relative_base(ctx.article.node, -1) + str(path)
 
-    def build(self, articles: Iterator[Article]):
+    def _build(self, articles: Iterable[Article]):
         with open(self.fs.join("style.css"), "w") as f:
             f.write(self.css)
         parents: List[Node] = []
@@ -118,7 +143,7 @@ class Html(Builder):
                 self.write_index(node, f)
 
     def write_article(self, article: Article, out: TextIO):
-        article.ensure_loaded()
+        article.ensure_resolved(self.project)
         ctx = self.context(article)
         with ZFMRenderer(ctx, RenderOptions(shift_headings_by=1)) as r:
             body = article.render(r)
@@ -161,7 +186,7 @@ class Html(Builder):
             "title": title,
             "body": body,
             "sections": [(n.label, get_name(n)) for n in node.children.values() if n.children],
-            "articles": [(n.label, n.item.cfg["title"]) for n in node.children.values() if n.item],
+            "articles": [(n.label, n.item.cfg["title"]) for n in node.children.values() if n.item and not n.item.is_index()],
         }
         out.write(self.index_template.render(**vals))
 
@@ -174,13 +199,13 @@ class Hubspot(Builder):
 
     name = "hubspot"
 
-    def resolve_link(self, ctx: Context, link: Interlink) -> str:
+    def _resolve_link(self, ctx: Context, link: Interlink) -> str:
         return ""
 
-    def resolve_asset(self, ctx: Context, asset: Asset) -> str:
+    def _resolve_asset(self, ctx: Context, asset: Asset) -> str:
         return ""
 
-    def build(self, articles: Iterator[Article]):
+    def _build(self, articles: Iterable[Article]):
         print("TODO")
 
 

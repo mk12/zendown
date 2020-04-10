@@ -13,6 +13,7 @@ setup(
         "PyYAML>=4.2b1",
         "mistletoe<2",
         "python-slugify>=4,<5",
+        "watchdog<2",
     ],
     entry_points={"console_scripts": ["zd = zendown.cli:main"]},
 )

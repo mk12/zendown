@@ -52,8 +52,6 @@ class Resource(ABC):
 
     def load(self):
         """Load the resource from disk."""
-        if self.is_loaded():
-            return
         name = self.__class__.__name__.lower()
         logging.info("loading %s %s from %s", name, self.node.ref, self.path)
         self._load()
@@ -130,6 +128,7 @@ class Include(Resource):
     def _load(self):
         with open(self.path) as f:
             self.raw = f.read()
+        self._doc = None
 
     def is_parsed(self) -> bool:
         return self._doc is not None

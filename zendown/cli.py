@@ -10,6 +10,7 @@ from zendown.build import Options, builders
 from zendown.files import create_project
 from zendown.logs import setup_logging
 from zendown.project import Project
+from zendown.watch import Watcher
 
 
 def main():
@@ -28,7 +29,7 @@ def main():
     elif args.verbose and args.verbose >= 2:
         log_level = logging.DEBUG
     exit_level = logging.ERROR
-    if args.keep_going:
+    if args.keep_going or getattr(args, "watch", False):
         exit_level = logging.FATAL
     setup_logging(sys.stderr, log_level, exit_level)
 
@@ -64,6 +65,9 @@ def get_parser() -> Tuple[ArgumentParser, Mapping[str, ArgumentParser]]:
 
     parser_build = commands.add_parser("build", help="build the project")
     parser_build.add_argument("builder", choices=builders.keys(), help="build target")
+    parser_build.add_argument(
+        "-c", "--clean", action="store_true", help="clean the build directory first",
+    )
     parser_build.add_argument(
         "-w",
         "--watch",
@@ -105,5 +109,12 @@ def command_list(args: Namespace):
 def command_build(args: Namespace):
     project = Project.find()
     builder = builders[args.builder](project, Options())
-    articles = project.query(args.query)
-    builder.build(articles)
+    if args.clean:
+        builder.clean()
+    if args.watch:
+        if args.query:
+            logging.warning("query %r ignored for --watch", args.query)
+        Watcher(project, builder).run()
+    else:
+        articles = project.query(args.query)
+        builder.build(articles)

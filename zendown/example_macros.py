@@ -68,6 +68,7 @@ def defs(ctx: Context, children: List[BlockToken]) -> str:
         label = strong(section.heading.children)
         blocks = section.blocks[:]
         if len(blocks) >= 1 and isinstance(blocks[0], Paragraph):
+            # TODO no mutating
             blocks[0].children[0:0] = [label, raw_text(": ")]
         else:
             result.append(paragraph([label, raw_text(":")]))

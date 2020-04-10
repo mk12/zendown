@@ -198,6 +198,9 @@ class Article(Resource):
         self.raw = body
         self._doc = None
         self._sections = None
+        self._links = None
+        self._assets = None
+        self._includes = None
 
     def is_parsed(self) -> bool:
         return self._doc is not None
@@ -206,6 +209,9 @@ class Article(Resource):
         assert self.raw is not None
         self._doc = parse_document(self.raw)
         self._sections = parse_sections(self._doc.children, self.gen_heading_label)
+        self._links = None
+        self._assets = None
+        self._includes = None
 
     def gen_heading_label(self, heading: Heading, used: Container[Anchor]) -> Anchor:
         """Choose a label for the heading that is not already used."""
@@ -313,12 +319,18 @@ class Article(Resource):
         if url.startswith("http://") or url.startswith("https://"):
             return None
         ref: Ref[Asset] = Ref.parse(url, leading_slash=False)
-        return project.get_asset(ref)
+        asset = project.get_asset(ref)
+        if not asset:
+            raise ResolveError(f"invalid asset reference {url!r}")
+        return asset
 
     def resolve_include(self, path: str, project: Project) -> Optional[Include]:
         """Resolve an include in the project."""
         ref: Ref[Include] = Ref.parse(path, leading_slash=False)
-        return project.get_include(ref)
+        include = project.get_include(ref)
+        if not include:
+            raise ResolveError(f"invalid include reference {path!r}")
+        return include
 
     @property
     def links(self) -> List[Interlink]:
