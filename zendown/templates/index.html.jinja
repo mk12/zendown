@@ -7,11 +7,14 @@
 
 <h1>{{ title }}</h1>
 
+{% if body %}
+{{ body | safe }}
+{% else %}
 {% if sections %}
 <h2>Sections</h2>
 <ul>
-{% for node in sections %}
-    <li><a href="{{ node.label }}/index.html">{{ node.label | capitalize }}</a></li>
+{% for label, title in sections %}
+    <li><a href="{{ label }}/index.html">{{ title }}</a></li>
 {% endfor %}
 </ul>
 {% endif %}
@@ -19,9 +22,10 @@
 {% if articles %}
 <h2>Articles</h2>
 <ul>
-{% for node in articles %}
-    <li><a href="{{ node.label }}.html">{{ node.item.cfg["title"] }}</a></li>
+{% for label, title in articles %}
+    <li><a href="{{ label }}.html">{{ title }}</a></li>
 {% endfor %}
 </ul>
+{% endif %}
 {% endif %}
 {% endblock %}

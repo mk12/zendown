@@ -167,6 +167,14 @@ class Article(Resource):
         self._assets: Optional[List[Asset]] = None
         self._includes: Optional[List[Include]] = None
 
+    def is_index(self) -> bool:
+        """Return true if this is an index article.
+
+        An index article is a special article in a section that defines content
+        for the index page. It can be a full article or a config-only file.
+        """
+        return self.node.label == Label("index")
+
     def is_loaded(self) -> bool:
         return self.raw is not None
 

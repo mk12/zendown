@@ -14,7 +14,7 @@ from zendown.files import FileSystem
 from zendown.project import Project
 from zendown.resource import Asset
 from zendown import templates
-from zendown.tree import Node, Ref
+from zendown.tree import Label, Node, Ref
 from zendown.zfm import Context, RenderOptions, ZFMRenderer
 
 
@@ -98,6 +98,8 @@ class Html(Builder):
         for article in articles:
             if article.node.parent is not None:
                 parents.append(article.node.parent)
+            if article.is_index():
+                continue
             article.ensure_resolved(self.project)
             path = self.article_path(article)
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -128,14 +130,38 @@ class Html(Builder):
         }
         out.write(self.article_template.render(**vals))
 
-    def write_index(self, node: Node, out: TextIO):
+    def write_index(self, node: Node[Article], out: TextIO):
         root = node.is_root()
+        index_node = node.children.get(Label("index"))
+        index = index_node.item if index_node else None
+        body = None
+        if index:
+            ctx = self.context(index)
+            index.ensure_loaded()
+            assert index.cfg
+            title = index.cfg["title"]
+            if not index.cfg_only:
+                index.ensure_resolved(self.project)
+                with ZFMRenderer(ctx, RenderOptions(shift_headings_by=1)) as r:
+                    body = index.render(r)
+        else:
+            title = self.project.name if root else str(node.ref.parts[-1])
+
+        def get_name(n: Node[Article]) -> str:
+            i = n.children.get(Label("index"))
+            if i and i.item:
+                i.item.ensure_loaded()
+                assert i.item.cfg
+                return i.item.cfg["title"]
+            return str(n.label)
+
         vals = {
             "base": self.relative_base(node),
             "root": root,
-            "title": self.project.name if root else str(node.ref.parts[-1]).capitalize(),
-            "sections": [n for n in node.children.values() if n.children],
-            "articles": [n for n in node.children.values() if n.item],
+            "title": title,
+            "body": body,
+            "sections": [(n.label, get_name(n)) for n in node.children.values() if n.children],
+            "articles": [(n.label, n.item.cfg["title"]) for n in node.children.values() if n.item],
         }
         out.write(self.index_template.render(**vals))
 
