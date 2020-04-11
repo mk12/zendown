@@ -10,12 +10,12 @@ from typing import Iterable, List, NamedTuple, Set, TextIO, Type
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
-from zendown.article import Article, Interlink
+from zendown import templates
+from zendown.article import Article, Index, Interlink
 from zendown.files import FileSystem
 from zendown.project import Project
 from zendown.resource import Asset
-from zendown import templates
-from zendown.tree import Label, Node, Ref
+from zendown.tree import Node, Ref
 from zendown.zfm import Context, RenderOptions, ZFMRenderer
 
 
@@ -140,7 +140,7 @@ class Html(Builder):
                 parents.append(node.parent)
             path = self.index_path(node.ref)
             with open(path, "w") as f:
-                self.write_index(node, f)
+                self.write_index(Index(node), f)
 
     def write_article(self, article: Article, out: TextIO):
         article.ensure_resolved(self.project)
@@ -155,38 +155,30 @@ class Html(Builder):
         }
         out.write(self.article_template.render(**vals))
 
-    def write_index(self, node: Node[Article], out: TextIO):
-        root = node.is_root()
-        index_node = node.children.get(Label("index"))
-        index = index_node.item if index_node else None
+    def write_index(self, index: Index, out: TextIO):
+        root = index.node.is_root()
         body = None
-        if index:
-            ctx = self.context(index)
-            index.ensure_loaded()
-            assert index.cfg
-            title = index.cfg["title"]
-            if not index.cfg_only:
-                index.ensure_resolved(self.project)
+        article = index.article
+        if article:
+            ctx = self.context(article)
+            article.ensure_loaded()
+            if not article.cfg_only:
+                article.ensure_resolved(self.project)
                 with ZFMRenderer(ctx, RenderOptions(shift_headings_by=1)) as r:
-                    body = index.render(r)
-        else:
-            title = self.project.name if root else str(node.ref.parts[-1])
-
-        def get_name(n: Node[Article]) -> str:
-            i = n.children.get(Label("index"))
-            if i and i.item:
-                i.item.ensure_loaded()
-                assert i.item.cfg
-                return i.item.cfg["title"]
-            return str(n.label)
-
+                    body = article.render(r)
+        sections = (Index(n) for n in index.node.children.values() if n.children)
+        articles = (
+            n.item
+            for n in index.node.children.values()
+            if n.item and not n.item.is_index()
+        )
         vals = {
-            "base": self.relative_base(node),
+            "base": self.relative_base(index.node),
             "root": root,
-            "title": title,
-            "body": body,
-            "sections": [(n.label, get_name(n)) for n in node.children.values() if n.children],
-            "articles": [(n.label, n.item.cfg["title"]) for n in node.children.values() if n.item and not n.item.is_index()],
+            "title": index.title,
+            "body": body
+            "sections": [(s.node.label, s.title) for s in sections],
+            "articles": [(a.node.label, a.title) for a in articles],
         }
         out.write(self.index_template.render(**vals))
 

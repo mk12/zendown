@@ -250,7 +250,7 @@ class ZFMRenderer(HTMLRenderer):
         if interlink:
             token.target = self.ctx.builder.resolve_link(self.ctx, interlink)
             if not token.children:
-                token.children = [raw_text(interlink.article.cfg["title"])]
+                token.children = [raw_text(interlink.article.title)]
         return super().render_link(token)
 
     def render_image(self, token: Image) -> str:

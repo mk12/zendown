@@ -202,6 +202,13 @@ class Article(Resource):
         self._assets = None
         self._includes = None
 
+    @property
+    def title(self) -> str:
+        """Return the title of the article."""
+        self.ensure_loaded()
+        assert self.cfg is not None
+        return self.cfg["title"]
+
     def is_parsed(self) -> bool:
         return self._doc is not None
 
@@ -357,3 +364,28 @@ class Article(Resource):
         """Render from ZFM Markdown to HTML."""
         assert self.is_resolved()
         return renderer.render(self.doc)
+
+
+class Index:
+
+    """Class for dealing with /index articles.
+
+    An index consists of an internal node of the article tree and (optionally,
+    if present) the /index article underneath it. Internal nodes do not directly
+    have article items because this does not map onto the filesystem well.
+    """
+
+    def __init__(self, node: Node[Article]):
+        assert node.item is None
+        self.node = node
+        self.article = None
+        if Label("index") in node.children:
+            self.article = node.children[Label("index")].item
+            assert self.article is not None
+
+    @property
+    def title(self) -> str:
+        """Return the title of the index."""
+        if self.article:
+            return self.article.title
+        return str(self.node.label)

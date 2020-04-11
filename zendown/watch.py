@@ -1,8 +1,8 @@
 """File watcher for automatic rebuilding."""
 
 import logging
-from pathlib import Path
 import time
+from pathlib import Path
 
 from watchdog.events import EVENT_TYPE_MODIFIED, FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
@@ -24,7 +24,9 @@ class Watcher:
         # Have to pass str, not Path, otherwise it crashes with SIGILL.
         self.observer.schedule(self.handler, str(self.fs.root), recursive=False)
         for subdir in ["content", "assets", "includes"]:
-            self.observer.schedule(self.handler, str(self.fs.join(subdir)), recursive=True)
+            self.observer.schedule(
+                self.handler, str(self.fs.join(subdir)), recursive=True
+            )
         self.observer.start()
         logging.info("started watcher")
         try:
@@ -36,7 +38,6 @@ class Watcher:
 
 
 class Handler(FileSystemEventHandler):
-
     def __init__(self, project: Project, builder: Builder):
         super().__init__()
         self.project = project
@@ -45,11 +46,11 @@ class Handler(FileSystemEventHandler):
     def matches(self, path: Path) -> bool:
         s = str(path)
         return (
-            s == "macros.py" or
-            s == "zendown.yml" or
-            s.startswith("content/") or
-            s.startswith("assets/") or
-            s.startswith("includes/")
+            s == "macros.py"
+            or s == "zendown.yml"
+            or s.startswith("content/")
+            or s.startswith("assets/")
+            or s.startswith("includes/")
         )
 
     def on_any_event(self, event: FileSystemEvent):
