@@ -2,7 +2,6 @@
 
 import logging
 import sys
-import webbrowser
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import Mapping, Tuple
@@ -121,13 +120,13 @@ def command_list(args: Namespace):
 
 
 def command_build(args: Namespace):
-    if args.open and args.builder != "html":
-        logging.fatal("--open is only supported for the html build target")
     project = Project.find()
     builder = builders[args.builder](project, Options())
     if args.clean:
         builder.clean()
     if args.watch:
+        if not builder.supports_watch:
+            logging.fatal("build target %s does not support --watch", args.builder)
         if args.query:
             logging.warning("query %r ignored for --watch", args.query)
         server = None
@@ -135,9 +134,5 @@ def command_build(args: Namespace):
             server = Server(port=args.port, builder=builder)
         Watcher(project, builder, server).run()
     else:
-
         articles = project.query(args.query)
-        builder.build(articles)
-        if args.open:
-            index = builder.fs.join("index.html")
-            webbrowser.open(index.absolute().as_uri())
+        builder.build(articles, open_output=args.open)

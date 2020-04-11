@@ -2,11 +2,12 @@
 
 import logging
 import os.path
+import webbrowser
 from abc import ABC, abstractmethod
 from importlib import resources
 from pathlib import Path
 from shutil import rmtree
-from typing import Iterable, List, NamedTuple, Set, TextIO, Type
+from typing import Iterable, List, NamedTuple, Optional, Set, TextIO, Type
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
@@ -29,6 +30,7 @@ class Builder(ABC):
     """Abstract base class for all builders."""
 
     name: str
+    supports_watch: bool
 
     def __init__(self, project: Project, options: Options):
         self.project = project
@@ -56,11 +58,18 @@ class Builder(ABC):
         logging.debug("resolved asset %s to %s", asset, url)
         return url
 
-    def build(self, articles: Iterable[Article]):
-        """Build the given articles."""
+    def build(self, articles: Iterable[Article], open_output: bool = False):
+        """Build the given articles.
+
+        If open_output is True, automatically opens the result in the
+        appropriate application (e.g. web browser).
+        """
         logging.info("building target %s", self.name)
         self.fs.root.mkdir(parents=True, exist_ok=True)
-        self._build(articles)
+        article_list = list(articles)
+        self._build(article_list)
+        if open_output:
+            self._open(article_list[0] if len(article_list) == 1 else None)
 
     @abstractmethod
     def _resolve_link(self, ctx: Context, link: Interlink) -> str:
@@ -71,7 +80,11 @@ class Builder(ABC):
         ...
 
     @abstractmethod
-    def _build(self, articles: Iterable[Article]):
+    def _build(self, articles: List[Article]):
+        ...
+
+    @abstractmethod
+    def _open(self, article: Optional[Article]):
         ...
 
 
@@ -80,6 +93,7 @@ class Html(Builder):
     """Builds HTML web pages for direct browsing (no server needed)."""
 
     name = "html"
+    supports_watch = True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -116,7 +130,7 @@ class Html(Builder):
             logging.error("%s: asset %s does not exist", ctx.article.path, path)
         return self.relative_base(ctx.article.node, -1) + str(path)
 
-    def _build(self, articles: Iterable[Article]):
+    def _build(self, articles: List[Article]):
         with open(self.fs.join("style.css"), "w") as f:
             f.write(self.css)
         parents: List[Node] = []
@@ -186,10 +200,18 @@ class Html(Builder):
     def relative_base(node: Node, adjust: int = 0) -> str:
         return "../" * (len(node.ref.parts) + adjust)
 
+    def _open(self, article: Optional[Article]):
+        if article:
+            path = self.article_path(article)
+        else:
+            path = self.index_path(self.project.articles.root.ref)
+        webbrowser.open(path.absolute().as_uri())
+
 
 class Hubspot(Builder):
 
     name = "hubspot"
+    supports_watch = False
 
     def _resolve_link(self, ctx: Context, link: Interlink) -> str:
         return ""
@@ -197,7 +219,10 @@ class Hubspot(Builder):
     def _resolve_asset(self, ctx: Context, asset: Asset) -> str:
         return ""
 
-    def _build(self, articles: Iterable[Article]):
+    def _build(self, articles: List[Article]):
+        print("TODO")
+
+    def _open(self, article: Optional[Article]):
         print("TODO")
 
 
