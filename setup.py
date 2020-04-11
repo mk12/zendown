@@ -12,6 +12,7 @@ setup(
         "livereload>=2,<3",
         "Jinja2>=2,<3" "PyYAML>=4.2b1",
         "mistletoe<2",
+        "pyperclip>=1,<2",
         "python-slugify>=4,<5",
         "watchdog<2",
     ],

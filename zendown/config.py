@@ -55,9 +55,6 @@ class Config(ABC):
         for key in self.required:
             if key not in self.data:
                 logging.error("%s: missing %r", self.path, key)
-        for key in self.data:
-            if key not in self.required and key not in self.optional:
-                logging.warning("%s: unexpected key %r", self.path, key)
         self.data = {**self.required, **self.optional, **defaults, **self.data}
 
     @classmethod

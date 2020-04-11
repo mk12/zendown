@@ -18,8 +18,10 @@ from typing import (
     TextIO,
     Type,
 )
+from urllib.parse import quote
 
 from jinja2 import Environment, PackageLoader, select_autoescape
+import pyperclip
 
 from zendown import templates
 from zendown.article import Article, Index, Interlink
@@ -42,16 +44,19 @@ class Builder(ABC):
 
     name: str
     supports_watch: bool
+    needs_fs: bool
 
     def __init__(self, project: Project, options: Options):
         self.project = project
         self.options = options
-        out_dir = project.fs.join(Path("out") / self.name)
-        self.fs = FileSystem(out_dir)
+        if self.needs_fs:
+            out_dir = project.fs.join(Path("out") / self.name)
+            self.fs = FileSystem(out_dir)
 
     def clean(self):
         """Delete the contents of the output directory."""
-        rmtree(self.fs.root)
+        if self.needs_fs:
+            rmtree(self.fs.root)
 
     def context(self, article: Article) -> Context:
         """Return a Context object for macros in an article."""
@@ -76,7 +81,8 @@ class Builder(ABC):
         appropriate application (e.g. web browser).
         """
         logging.info("building target %s", self.name)
-        self.fs.root.mkdir(parents=True, exist_ok=True)
+        if self.needs_fs:
+            self.fs.root.mkdir(parents=True, exist_ok=True)
         article_list = list(articles)
         self._build(article_list)
         if open_output:
@@ -105,6 +111,7 @@ class Html(Builder):
 
     name = "html"
     supports_watch = True
+    needs_fs = True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -124,6 +131,9 @@ class Html(Builder):
         return Path("/".join(slugs))
 
     def article_path(self, article: Article) -> Path:
+        if article.is_index():
+            assert article.node.parent
+            return self.index_path(article.node.parent)
         path = self.node_path(article.node.parent) / article.slug
         return self.fs.join(path.with_suffix(".html"))
 
@@ -131,20 +141,21 @@ class Html(Builder):
         return self.fs.join(self.node_path(node) / "index.html")
 
     def _resolve_link(self, ctx: Context, link: Interlink) -> str:
-        source = self.article_path(ctx.article).parent
-        dest = self.article_path(link.article)
-        rel = os.path.relpath(dest, source)
-        if rel == ".":
-            return "#"
+        if link.article is ctx.article:
+            rel = ""
+        else:
+            source = self.article_path(ctx.article).parent
+            dest = self.article_path(link.article)
+            rel = quote(os.path.relpath(dest, source))
         if link.section:
             return f"{rel}#{link.section.node.label}"
-        return rel
+        return rel or "#"
 
     def _resolve_asset(self, ctx: Context, asset: Asset) -> str:
         path = asset.path
         if not self.project.fs.join(path).exists():
             logging.error("%s: asset %s does not exist", ctx.article.path, path)
-        return self.relative_base(ctx.article.node, -1) + str(path)
+        return self.relative_base(ctx.article.node, -1) + quote(str(path))
 
     def _build(self, articles: Sequence[Article]):
         assets = self.fs.join("assets")
@@ -232,12 +243,22 @@ class Hubspot(Builder):
 
     name = "hubspot"
     supports_watch = False
+    needs_fs = False
 
     def __init__(self, project: Project, options: Options):
         super().__init__(project, options)
-        self.base_url = self.required_config(project.cfg, "hubspot_url")
+        self.company_id = self.config(project.cfg, "hubspot_company_id")
+        self.base_url = self.config(project.cfg, "hubspot_base_url").rstrip("/")
+        if not (
+            self.base_url.startswith("http://") or self.base_url.startswith("https://")
+        ):
+            logging.fatal(
+                "%s: hubspot_base_url must start with http:// or https://",
+                project.cfg.path,
+            )
+        self.asset_base = self.config(project.cfg, "hubspot_asset_base").rstrip("/")
 
-    def required_config(self, cfg: Config, key: str) -> Any:
+    def config(self, cfg: Config, key: str) -> Any:
         value = cfg.get(key)
         if value is None:
             logging.fatal(
@@ -245,11 +266,33 @@ class Hubspot(Builder):
             )
         return value
 
+    def article_url(self, article: Article) -> str:
+        return f"{self.base_url}/{article.slug}"
+
+    def index_url(self, node: Node[Article]) -> str:
+        return f"{self.base_url}/{Index(node).slug}"
+
+    def article_edit_url(self, article: Article) -> str:
+        article.ensure_loaded()
+        assert article.cfg
+        article_id = self.config(article.cfg, "hubspot_id")
+        return f"https://app.hubspot.com/knowledge/{self.company_id}/edit/{article_id}"
+
+    def article_api_url(self, article: Article) -> str:
+        article.ensure_loaded()
+        assert article.cfg
+        article_id = self.config(article.cfg, "hubspot_id")
+        return f"https://api.hubspot.com/knowledge-content/v1/knowledge-articles/{article_id}?portalId={self.company_id}"
+
     def _resolve_link(self, ctx: Context, link: Interlink) -> str:
-        return ""
+        url = self.article_url(link.article)
+        if link.section:
+            return f"{url}#{link.section.node.label}"
+        return url
 
     def _resolve_asset(self, ctx: Context, asset: Asset) -> str:
-        return ""
+        path = self.asset_base / asset.path.relative_to(self.project.fs.join("assets"))
+        return f"{self.base_url}/hs-fs/hubfs/{quote(str(path))}"
 
     def _build(self, articles: Sequence[Article]):
         if not articles:
@@ -257,14 +300,40 @@ class Hubspot(Builder):
         if len(articles) > 1:
             logging.fatal("%s builder only supports building 1 article", self.name)
         article = articles[0]
+        edit_url = self.article_edit_url(article)
+        print(
+            f"""
+Zendown will open your browser to {edit_url}
+
+Once there (and logged in), follow these steps:
+
+1. Right click on the page and choose "Inspect Element".
+2. Switch to the "Network" tab in the developer tools.
+3. Click on the "XHR" filter label.
+4. Type a letter in the article body. An entry should show up in Network.
+5. Right click the entry and select "Copy as cURL".
+
+When you're ready, press enter.
+"""
+        )
+        reply = input()
+        if reply.lower() == "q":
+            logging.fatal("aborting")
+        reply = input("Have you completed steps 1-5? [y/N]")
+        if reply.lower() != "y":
+            logging.fatal("aborting")
+        curl = pyperclip.paste()
+        if not (curl.startswith("curl ") and self.article_api_url(article) in curl):
+            logging.fatal("failed to parse cURL; are you sure you copied it?")
+        article.ensure_resolved(self.project)
+        ctx = self.context(article)
+        with ZFMRenderer(ctx, RenderOptions(shift_headings_by=2)) as r:
+            body = article.render(r)
+        print(body)
+        webbrowser.open(edit_url)
 
     def _open(self, article: Optional[Article]):
-        if article:
-            # TODO
-            url = self.base_url
-        else:
-            url = self.base_url
-        webbrowser.open(url)
+        webbrowser.open(self.article_url(article) if article else self.base_url)
 
 
 _builder_list: List[Type[Builder]] = [Html, Hubspot]
