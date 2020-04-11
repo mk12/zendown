@@ -1,6 +1,6 @@
 """Helpers for building and manipulating mistletoe tokens."""
 
-from typing import Callable, List, Union
+from typing import Callable, List, Sequence, Union
 
 from mistletoe import block_token
 from mistletoe.block_token import BlockToken, HTMLBlock, ListItem, Paragraph
@@ -9,7 +9,7 @@ from mistletoe.span_token import Emphasis, HTMLSpan, Link, RawText, SpanToken, S
 Token = Union[SpanToken, BlockToken]
 
 
-def walk(tokens: Union[Token, List[Token]], f: Callable[[Token], None]):
+def walk(tokens: Union[Token, Sequence[Token]], f: Callable[[Token], None]):
     """Recursively call f on tokens and all descendants."""
 
     def go(t: Token):
@@ -38,7 +38,7 @@ def strip_comments(token: Token):
     walk(token, go)
 
 
-def transform_text(tokens: List[Token], f: Callable[[str], str]):
+def transform_text(tokens: Sequence[Token], f: Callable[[str], str]):
     """Transform tokens by applying f to all raw text."""
 
     def go(t: Token):

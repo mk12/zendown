@@ -13,8 +13,8 @@
 {% if sections %}
 <h2>Sections</h2>
 <ul>
-{% for label, title in sections %}
-    <li><a href="{{ label }}/index.html">{{ title }}</a></li>
+{% for slug, title in sections %}
+    <li><a href="{{ slug }}/index.html">{{ title }}</a></li>
 {% endfor %}
 </ul>
 {% endif %}
@@ -22,8 +22,8 @@
 {% if articles %}
 <h2>Articles</h2>
 <ul>
-{% for label, title in articles %}
-    <li><a href="{{ label }}.html">{{ title }}</a></li>
+{% for slug, title in articles %}
+    <li><a href="{{ slug }}.html">{{ title }}</a></li>
 {% endfor %}
 </ul>
 {% endif %}

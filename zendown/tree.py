@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 from typing import (
     Any,
     Callable,
@@ -59,10 +58,6 @@ class Ref(Generic[T]):
             assert len(s) >= 1 and s[0] == "/"
             s = s[1:]
         return Ref(tuple(Label(p) for p in s.split("/")))
-
-    @property
-    def path(self) -> Path:
-        return Path("/".join(str(label) for label in self.parts))
 
     def __repr__(self) -> str:
         return "/" + "/".join(str(label) for label in self.parts)

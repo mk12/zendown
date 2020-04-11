@@ -4,7 +4,7 @@ import logging
 from abc import ABC, abstractproperty
 from io import StringIO
 from pathlib import Path
-from typing import Any, Dict, TextIO, Type, TypeVar
+from typing import Any, Dict, Mapping, Optional, TextIO, Type, TypeVar
 
 import yaml
 
@@ -28,7 +28,7 @@ class Config(ABC):
     context-dependent (static defaults can go in the required/optional dicts).
     """
 
-    def __init__(self, path: Path, data: Dict[str, Any]):
+    def __init__(self, path: Path, data: Mapping[str, Any]):
         self.path = path
         self.data = data
 
@@ -85,3 +85,7 @@ class Config(ABC):
     def __getitem__(self, key: str) -> Any:
         """Get a configuration value."""
         return self.data[key]
+
+    def get(self, key: str) -> Optional[Any]:
+        """Get a configuration value, or None if it does not exist."""
+        return self.data.get(key)

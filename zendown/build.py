@@ -7,16 +7,27 @@ from abc import ABC, abstractmethod
 from importlib import resources
 from pathlib import Path
 from shutil import rmtree
-from typing import Iterable, List, NamedTuple, Optional, Set, TextIO, Type
+from typing import (
+    Any,
+    Iterable,
+    List,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Set,
+    TextIO,
+    Type,
+)
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from zendown import templates
 from zendown.article import Article, Index, Interlink
+from zendown.config import Config
 from zendown.files import FileSystem
 from zendown.project import Project
 from zendown.resource import Asset
-from zendown.tree import Node, Ref
+from zendown.tree import Node
 from zendown.zfm import Context, RenderOptions, ZFMRenderer
 
 
@@ -80,7 +91,7 @@ class Builder(ABC):
         ...
 
     @abstractmethod
-    def _build(self, articles: List[Article]):
+    def _build(self, articles: Sequence[Article]):
         ...
 
     @abstractmethod
@@ -104,15 +115,20 @@ class Html(Builder):
         self.css = resources.open_text(templates, "style.css").read()
         self.index_template = self.env.get_template("index.html.jinja")
         self.article_template = self.env.get_template("article.html.jinja")
-        assets = self.fs.join("assets")
-        if not assets.exists():
-            assets.symlink_to(self.project.fs.join("assets"), target_is_directory=True)
+
+    def node_path(self, node: Optional[Node[Article]]) -> Path:
+        slugs: List[str] = []
+        while node and not node.is_root():
+            slugs.insert(0, Index(node).slug)
+            node = node.parent
+        return Path("/".join(slugs))
 
     def article_path(self, article: Article) -> Path:
-        return self.fs.join(article.node.ref.path.with_suffix(".html"))
+        path = self.node_path(article.node.parent) / article.slug
+        return self.fs.join(path.with_suffix(".html"))
 
-    def index_path(self, ref: Ref[Article]) -> Path:
-        return self.fs.join(ref.path / "index.html")
+    def index_path(self, node: Node[Article]) -> Path:
+        return self.fs.join(self.node_path(node) / "index.html")
 
     def _resolve_link(self, ctx: Context, link: Interlink) -> str:
         source = self.article_path(ctx.article).parent
@@ -130,10 +146,14 @@ class Html(Builder):
             logging.error("%s: asset %s does not exist", ctx.article.path, path)
         return self.relative_base(ctx.article.node, -1) + str(path)
 
-    def _build(self, articles: List[Article]):
+    def _build(self, articles: Sequence[Article]):
+        assets = self.fs.join("assets")
+        if not assets.exists():
+            relative = os.path.relpath(self.project.fs.join("assets"), self.fs.root)
+            assets.symlink_to(relative, target_is_directory=True)
         with open(self.fs.join("style.css"), "w") as f:
             f.write(self.css)
-        parents: List[Node] = []
+        parents: List[Node[Article]] = []
         for article in articles:
             if article.node.parent is not None:
                 parents.append(article.node.parent)
@@ -144,7 +164,7 @@ class Html(Builder):
             path.parent.mkdir(parents=True, exist_ok=True)
             with open(path, "w") as f:
                 self.write_article(article, f)
-        done: Set[Node] = set()
+        done: Set[Node[Article]] = set()
         while parents:
             node = parents.pop()
             if node in done:
@@ -152,7 +172,7 @@ class Html(Builder):
             done.add(node)
             if node.parent:
                 parents.append(node.parent)
-            path = self.index_path(node.ref)
+            path = self.index_path(node)
             with open(path, "w") as f:
                 self.write_index(Index(node), f)
 
@@ -191,8 +211,8 @@ class Html(Builder):
             "root": root,
             "title": index.title,
             "body": body,
-            "sections": [(s.node.label, s.title) for s in sections],
-            "articles": [(a.node.label, a.title) for a in articles],
+            "sections": [(s.slug, s.title) for s in sections],
+            "articles": [(a.slug, a.title) for a in articles],
         }
         out.write(self.index_template.render(**vals))
 
@@ -204,7 +224,7 @@ class Html(Builder):
         if article:
             path = self.article_path(article)
         else:
-            path = self.index_path(self.project.articles.root.ref)
+            path = self.index_path(self.project.articles.root)
         webbrowser.open(path.absolute().as_uri())
 
 
@@ -213,17 +233,38 @@ class Hubspot(Builder):
     name = "hubspot"
     supports_watch = False
 
+    def __init__(self, project: Project, options: Options):
+        super().__init__(project, options)
+        self.base_url = self.required_config(project.cfg, "hubspot_url")
+
+    def required_config(self, cfg: Config, key: str) -> Any:
+        value = cfg.get(key)
+        if value is None:
+            logging.fatal(
+                "%s: missing %r, required by %s builder", cfg.path, key, self.name
+            )
+        return value
+
     def _resolve_link(self, ctx: Context, link: Interlink) -> str:
         return ""
 
     def _resolve_asset(self, ctx: Context, asset: Asset) -> str:
         return ""
 
-    def _build(self, articles: List[Article]):
-        print("TODO")
+    def _build(self, articles: Sequence[Article]):
+        if not articles:
+            return
+        if len(articles) > 1:
+            logging.fatal("%s builder only supports building 1 article", self.name)
+        article = articles[0]
 
     def _open(self, article: Optional[Article]):
-        print("TODO")
+        if article:
+            # TODO
+            url = self.base_url
+        else:
+            url = self.base_url
+        webbrowser.open(url)
 
 
 _builder_list: List[Type[Builder]] = [Html, Hubspot]

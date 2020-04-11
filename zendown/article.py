@@ -4,7 +4,17 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Container, Dict, List, Optional, Set, cast
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    Container,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    cast,
+)
 
 from mistletoe.block_token import BlockToken, Document, Heading
 from mistletoe.span_token import Image, Link
@@ -49,7 +59,7 @@ GenLabelFn = Callable[[Heading, Container[Anchor]], Anchor]
 
 
 def parse_sections(
-    tokens: List[BlockToken], gen_label: Optional[GenLabelFn] = None
+    tokens: Sequence[BlockToken], gen_label: Optional[GenLabelFn] = None
 ) -> Tree[Section]:
     """Parse tokens into a tree of sections.
 
@@ -156,6 +166,8 @@ class Article(Resource):
     rendered results are not stored in the object.
     """
 
+    node: Node[Article]
+
     def __init__(self, path: Path, node: Node[Article]):
         super().__init__(path, node)
         self.cfg_only = path.suffix == ".yml"
@@ -191,7 +203,10 @@ class Article(Resource):
                 if not self.cfg_only:
                     logging.error("article %s should be .yml, not .md", self.path)
             body = f.read()
-        default_slug = slugify(self.path.with_suffix("").name)
+        if self.is_index():
+            default_slug = slugify(self.path.parent.name)
+        else:
+            default_slug = slugify(self.path.with_suffix("").name)
         self.cfg = ArticleConfig.loads(self.path, head)
         self.cfg.validate(slug=default_slug)
         logging.debug("article %s config: %r", self.node.ref, self.cfg)
@@ -208,6 +223,13 @@ class Article(Resource):
         self.ensure_loaded()
         assert self.cfg is not None
         return self.cfg["title"]
+
+    @property
+    def slug(self) -> str:
+        """Return the slug of the article."""
+        self.ensure_loaded()
+        assert self.cfg is not None
+        return self.cfg["slug"]
 
     def is_parsed(self) -> bool:
         return self._doc is not None
@@ -389,3 +411,10 @@ class Index:
         if self.article:
             return self.article.title
         return str(self.node.label)
+
+    @property
+    def slug(self) -> str:
+        """Return the slug for the index."""
+        if self.article:
+            return self.article.slug
+        return slugify(str(self.node.label))

@@ -5,14 +5,12 @@ from __future__ import annotations
 import logging
 from abc import ABC
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, TypeVar
+from typing import TYPE_CHECKING, Optional
 
 from mistletoe.block_token import Document
 
 from zendown.tree import Node
 from zendown.zfm import parse_document
-
-T = TypeVar("T", bound="Resource")
 
 if TYPE_CHECKING:
     # pylint: disable=cyclic-import
@@ -33,7 +31,10 @@ class Resource(ABC):
     not been loaded yet.
     """
 
-    def __init__(self: T, path: Path, node: Node[T]):
+    # Tried using self: T` and node: Node[T] with TypeVar("T", bound="Resource")
+    # but ran into issues. Also tried Node[Resource] but had trouble making Node
+    # covariant. Decided to declare it Node and refine the type in subclasses.
+    def __init__(self, path: Path, node: Node):
         self.path = path
         self.node = node
 
@@ -112,10 +113,14 @@ class Asset(Resource):
     build (e.g., adding borders).
     """
 
+    node: Node[Asset]
+
 
 class Include(Resource):
 
     """A file to be included in articles."""
+
+    node: Node[Include]
 
     def __init__(self, path: Path, node: Node[Include]):
         super().__init__(path, node)

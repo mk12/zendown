@@ -5,7 +5,17 @@ from __future__ import annotations
 import enum
 import inspect
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, TypeVar, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    TypeVar,
+    Union,
+)
 
 from mistletoe.block_token import BlockToken
 from mistletoe.span_token import SpanToken, tokenize_inner
@@ -34,7 +44,7 @@ class Context:
         # This is set in ZFMRenderer.__init__.
         self.renderer: Optional[ZFMRenderer] = None
 
-    def render(self, token: Union[Token, List[Token]]) -> str:
+    def render(self, token: Union[Token, Sequence[Token]]) -> str:
         """Render a token or a list of tokens to HTML."""
         assert self.renderer
         if not isinstance(token, list):
