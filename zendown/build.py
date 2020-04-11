@@ -176,7 +176,7 @@ class Html(Builder):
             "base": self.relative_base(index.node),
             "root": root,
             "title": index.title,
-            "body": body
+            "body": body,
             "sections": [(s.node.label, s.title) for s in sections],
             "articles": [(a.node.label, a.title) for a in articles],
         }

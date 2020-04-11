@@ -2,6 +2,7 @@
 
 import logging
 import sys
+import webbrowser
 from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import Mapping, Tuple
@@ -10,7 +11,7 @@ from zendown.build import Options, builders
 from zendown.files import create_project
 from zendown.logs import setup_logging
 from zendown.project import Project
-from zendown.watch import Watcher
+from zendown.watch import Server, Watcher
 
 
 def main():
@@ -75,6 +76,19 @@ def get_parser() -> Tuple[ArgumentParser, Mapping[str, ArgumentParser]]:
         help="watch files and automatically rebuild",
     )
     parser_build.add_argument(
+        "-o",
+        "--open",
+        action="store_true",
+        help="open the browser (live-reloading if --watch)",
+    )
+    parser_build.add_argument(
+        "-p",
+        "--port",
+        type=int,
+        default=5000,
+        help="port to use for --watch --open server",
+    )
+    parser_build.add_argument(
         "query", nargs="?", default="", help="filter articles by ref",
     )
 
@@ -107,6 +121,8 @@ def command_list(args: Namespace):
 
 
 def command_build(args: Namespace):
+    if args.open and args.builder != "html":
+        logging.fatal("--open is only supported for the html build target")
     project = Project.find()
     builder = builders[args.builder](project, Options())
     if args.clean:
@@ -114,7 +130,14 @@ def command_build(args: Namespace):
     if args.watch:
         if args.query:
             logging.warning("query %r ignored for --watch", args.query)
-        Watcher(project, builder).run()
+        server = None
+        if args.open:
+            server = Server(port=args.port, builder=builder)
+        Watcher(project, builder, server).run()
     else:
+
         articles = project.query(args.query)
         builder.build(articles)
+        if args.open:
+            index = builder.fs.join("index.html")
+            webbrowser.open(index.absolute().as_uri())
