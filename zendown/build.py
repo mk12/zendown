@@ -1,7 +1,10 @@
 """Build targets for projects."""
 
+import json
 import logging
 import os.path
+import shlex
+import subprocess
 import webbrowser
 from abc import ABC, abstractmethod
 from importlib import resources
@@ -319,18 +322,31 @@ When you're ready, press enter.
         reply = input()
         if reply.lower() == "q":
             logging.fatal("aborting")
-        reply = input("Have you completed steps 1-5? [y/N]")
+        webbrowser.open(edit_url)
+        reply = input("Have you completed steps 1-5? [y/N] ")
         if reply.lower() != "y":
             logging.fatal("aborting")
-        curl = pyperclip.paste()
-        if not (curl.startswith("curl ") and self.article_api_url(article) in curl):
+        curl = shlex.split(pyperclip.paste().replace(" \\\n", " "))
+        data_idx = curl.index("--data-binary")
+        if not (len(curl) > 20 and curl[0] == "curl" and data_idx >= 1):
             logging.fatal("failed to parse cURL; are you sure you copied it?")
         article.ensure_resolved(self.project)
         ctx = self.context(article)
         with ZFMRenderer(ctx, RenderOptions(shift_headings_by=2)) as r:
             body = article.render(r)
-        print(body)
-        webbrowser.open(edit_url)
+        print(f"Using the following content:\n\n{body}\n")
+        reply = input("Continue? [y/N] ")
+        if reply.lower() != "y":
+            logging.fatal("aborting")
+        curl[data_idx + 1] = shlex.quote(
+            json.dumps({"generator": "TINYMCE", "articleBody": body})
+        )
+        cmd_str = "\n".join(curl)
+        print(f"About to run the following command:\n\n{cmd_str}\n")
+        reply = input("Continue? [y/N] ")
+        if reply.lower() != "y":
+            logging.fatal("aborting")
+        subprocess.call(curl)
 
     def _open(self, article: Optional[Article]):
         webbrowser.open(self.article_url(article) if article else self.base_url)
