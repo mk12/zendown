@@ -1,7 +1,7 @@
 {% extends "base.html.jinja" %}
 
 {% block content %}
-<a href="index.html">Index</a>
+<a href="{{ base }}index.html">Home</a> | <a href="index.html">Index</a>
 <h1>{{ title }}</h1>
 {{ body | safe }}
 {% endblock %}

@@ -2,30 +2,8 @@
 
 {% block content %}
 {% if not root %}
-<a href="../index.html">Go up</a>
+<a href="{{ base }}index.html">Home</a> | <a href="../index.html">Go up</a>
 {% endif %}
-
 <h1>{{ title }}</h1>
-
-{% if body %}
 {{ body | safe }}
-{% else %}
-{% if sections %}
-<h2>Sections</h2>
-<ul>
-{% for slug, title in sections %}
-    <li><a href="{{ slug }}/index.html">{{ title }}</a></li>
-{% endfor %}
-</ul>
-{% endif %}
-
-{% if articles %}
-<h2>Articles</h2>
-<ul>
-{% for slug, title in articles %}
-    <li><a href="{{ slug }}.html">{{ title }}</a></li>
-{% endfor %}
-</ul>
-{% endif %}
-{% endif %}
 {% endblock %}

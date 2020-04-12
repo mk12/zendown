@@ -24,7 +24,7 @@ from typing import (
 from urllib.parse import quote
 
 import pyperclip
-from jinja2 import Environment, PackageLoader, select_autoescape
+from jinja2 import Environment, PackageLoader, escape, select_autoescape
 
 from zendown import templates
 from zendown.article import Article, Index, Interlink
@@ -204,7 +204,6 @@ class Html(Builder):
         out.write(self.article_template.render(**vals))
 
     def write_index(self, index: Index, out: TextIO):
-        root = index.node.is_root()
         body = None
         article = index.article
         if article:
@@ -214,20 +213,38 @@ class Html(Builder):
                 article.ensure_resolved(self.project)
                 with ZFMRenderer(ctx, RenderOptions(shift_headings_by=1)) as r:
                     body = article.render(r)
-        sections = (Index(n) for n in index.node.children.values() if n.children)
-        articles = (
-            n.item
-            for n in index.node.children.values()
-            if n.item and not n.item.is_index()
-        )
+        root = index.node.is_root()
         vals = {
             "base": self.relative_base(index.node),
             "root": root,
             "title": index.title,
             "body": body,
-            "sections": [(s.slug, s.title) for s in sections],
-            "articles": [(a.slug, a.title) for a in articles],
         }
+        if body:
+            out.write(self.index_template.render(**vals))
+            return
+
+        def make_tree(n: Node[Article], rel: str) -> str:
+            items = []
+            for child in n.children.values():
+                article = child.item
+                if article and not article.is_index():
+                    items.append(
+                        f'<a href="{rel}{article.slug}.html">{escape(article.title)}</a>'
+                    )
+            for child in n.children.values():
+                if not child.children:
+                    continue
+                assert not child.item
+                i = Index(child)
+                items.append(
+                    f'<a href="{rel}{i.slug}/index.html">{escape(i.title)}</a>'
+                    + make_tree(child, f"{i.slug}/")
+                )
+            items_str = "\n".join(f"<li>{item}</li>" for item in items)
+            return f"<ul>\n{items_str}</ul>\n"
+
+        vals["body"] = make_tree(index.node, "")
         out.write(self.index_template.render(**vals))
 
     @staticmethod
