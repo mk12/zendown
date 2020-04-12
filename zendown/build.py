@@ -322,11 +322,11 @@ When you're ready, press enter.
         reply = input()
         if reply.lower() == "q":
             logging.fatal("aborting")
-        webbrowser.open(edit_url)
+        # webbrowser.open(edit_url)
         reply = input("Have you completed steps 1-5? [y/N] ")
         if reply.lower() != "y":
             logging.fatal("aborting")
-        curl = shlex.split(pyperclip.paste().replace(" \\\n", " "))
+        curl = shlex.split(pyperclip.paste())
         data_idx = curl.index("--data-binary")
         if not (len(curl) > 20 and curl[0] == "curl" and data_idx >= 1):
             logging.fatal("failed to parse cURL; are you sure you copied it?")
@@ -338,8 +338,9 @@ When you're ready, press enter.
         reply = input("Continue? [y/N] ")
         if reply.lower() != "y":
             logging.fatal("aborting")
-        curl[data_idx + 1] = shlex.quote(
-            json.dumps({"generator": "TINYMCE", "articleBody": body})
+        print("[[[" + repr(curl[data_idx + 1]) + "]]]")
+        curl[data_idx + 1] = json.dumps(
+            {"articleBody": body.strip(), "generator": "TINYMCE"}, separators=(",", ":")
         )
         cmd_str = "\n".join(curl)
         print(f"About to run the following command:\n\n{cmd_str}\n")
