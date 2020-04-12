@@ -239,7 +239,7 @@ class Html(Builder):
                 i = Index(child)
                 items.append(
                     f'<a href="{rel}{i.slug}/index.html">{escape(i.title)}</a>'
-                    + make_tree(child, f"{i.slug}/")
+                    + make_tree(child, f"{rel}{i.slug}/")
                 )
             items_str = "\n".join(f"<li>{item}</li>" for item in items)
             return f"<ul>\n{items_str}</ul>\n"
