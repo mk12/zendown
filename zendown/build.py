@@ -20,8 +20,8 @@ from typing import (
 )
 from urllib.parse import quote
 
-from jinja2 import Environment, PackageLoader, select_autoescape
 import pyperclip
+from jinja2 import Environment, PackageLoader, select_autoescape
 
 from zendown import templates
 from zendown.article import Article, Index, Interlink

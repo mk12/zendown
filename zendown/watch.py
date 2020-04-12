@@ -12,7 +12,7 @@ import livereload
 from livereload.handlers import LiveReloadHandler
 from tornado.ioloop import IOLoop
 from tornado.websocket import WebSocketError
-from watchdog.events import EVENT_TYPE_MODIFIED, FileSystemEvent, FileSystemEventHandler
+from watchdog.events import FileModifiedEvent, FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from zendown.build import Builder
@@ -83,13 +83,17 @@ class Handler(FileSystemEventHandler):
         path = Path(event.src_path).relative_to(self.project.fs.root)
         if not self.matches(path):
             return
-        if event.event_type == EVENT_TYPE_MODIFIED:
+        if isinstance(event, FileModifiedEvent):
+            if path == Path("macros.py"):
+                logging.info(
+                    "%s %s: reload macros + build", event.src_path, event.event_type
+                )
+                self.project.load_macros()
             logging.info("%s %s: build", event.src_path, event.event_type)
         else:
             logging.info("%s %s: scan + build", event.src_path, event.event_type)
             self.project.scan_articles()
-        for article in self.project.all_resouces():
-            article.load()
+        self.project.unload_all()
         self.build_all()
         self.reload()
 

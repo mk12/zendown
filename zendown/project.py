@@ -154,6 +154,11 @@ class Project:
         yield from self.assets.by_ref.values()
         yield from self.includes.by_ref.values()
 
+    def unload_all(self):
+        """Unload all resources in the project."""
+        for resource in self.all_resouces():
+            resource.unload()
+
     def query(self, substr: str) -> Iterator[Article]:
         """Iterate over articles whose refs have the given substring."""
         for ref, article in self.articles.by_ref.items():

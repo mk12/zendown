@@ -74,6 +74,7 @@ class Config(ABC):
             data = yaml.safe_load(content)
         except yaml.YAMLError as ex:
             logging.error("cannot parse %s: %s", path, ex)
+            data = {}
         if not isinstance(data, dict):
             logging.error("invalid YAML in %s: %s", path, type(data))
             data = {}

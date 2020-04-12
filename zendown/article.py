@@ -190,8 +190,12 @@ class Article(Resource):
     def is_loaded(self) -> bool:
         return self.raw is not None
 
+    def _unload(self):
+        self.raw = None
+        self.cfg = None
+
     def _load(self):
-        with open(self.path) as f:
+        with self.open_file() as f:
             head = ""
             for line in f:
                 if line.rstrip() == "---":
@@ -211,11 +215,6 @@ class Article(Resource):
         self.cfg.validate(slug=default_slug)
         logging.debug("article %s config: %r", self.node.ref, self.cfg)
         self.raw = body
-        self._doc = None
-        self._sections = None
-        self._links = None
-        self._assets = None
-        self._includes = None
 
     @property
     def title(self) -> str:
@@ -234,13 +233,14 @@ class Article(Resource):
     def is_parsed(self) -> bool:
         return self._doc is not None
 
+    def _unparse(self):
+        self._doc = None
+        self._sections = None
+
     def _parse(self):
         assert self.raw is not None
         self._doc = parse_document(self.raw)
         self._sections = parse_sections(self._doc.children, self.gen_heading_label)
-        self._links = None
-        self._assets = None
-        self._includes = None
 
     def gen_heading_label(self, heading: Heading, used: Container[Anchor]) -> Anchor:
         """Choose a label for the heading that is not already used."""
@@ -280,6 +280,11 @@ class Article(Resource):
 
     def is_resolved(self) -> bool:
         return self._links is not None
+
+    def _unresolve(self):
+        self._links = None
+        self._assets = None
+        self._includes = None
 
     def _resolve(self, project: Project):
         self._links = []
