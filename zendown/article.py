@@ -137,6 +137,7 @@ class ArticleConfig(Config):
 
     optional = {
         "slug": None,  # default set in Article.load
+        "subtitle": "",
     }
 
 

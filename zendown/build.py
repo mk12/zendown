@@ -1,5 +1,6 @@
 """Build targets for projects."""
 
+import html
 import json
 import logging
 import os.path
@@ -325,6 +326,24 @@ class Hubspot(Builder):
         if len(articles) > 1:
             logging.fatal("%s builder only supports building 1 article", self.name)
         article = articles[0]
+        article.ensure_resolved(self.project)
+        ctx = self.context(article)
+        with ZFMRenderer(ctx, RenderOptions(shift_headings_by=2)) as r:
+            body = article.render(r)
+        preamble = f"<h1>{html.escape(article.title)}</h1>\n"
+        assert article.cfg
+        subtitle = article.cfg["subtitle"]
+        if subtitle:
+            preamble += f"<h2>{html.escape(subtitle)}</h2>\n"
+        pyperclip.copy(preamble + body)
+        webbrowser.open(self.article_edit_url(article))
+
+    def _old_build(self, articles: Sequence[Article]):
+        if not articles:
+            return
+        if len(articles) > 1:
+            logging.fatal("%s builder only supports building 1 article", self.name)
+        article = articles[0]
         edit_url = self.article_edit_url(article)
         print(
             f"""
@@ -344,7 +363,7 @@ When you're ready, press enter.
         reply = input()
         if reply.lower() == "q":
             logging.fatal("aborting")
-        # webbrowser.open(edit_url)
+        webbrowser.open(edit_url)
         reply = input("Have you completed steps 1-5? [y/N] ")
         if reply.lower() != "y":
             logging.fatal("aborting")
