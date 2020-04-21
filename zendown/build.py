@@ -332,7 +332,7 @@ class Hubspot(Builder):
             body = article.render(r)
         preamble = f"<h1>{html.escape(article.title)}</h1>\n"
         assert article.cfg
-        subtitle = article.cfg["subtitle"]
+        subtitle = article.cfg["subtitle"] or ""
         preamble += f"<h2>{html.escape(subtitle)}</h2>\n"
         pyperclip.copy(preamble + body)
         webbrowser.open(self.article_edit_url(article))
