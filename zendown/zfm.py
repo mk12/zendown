@@ -235,7 +235,8 @@ class ZFMRenderer(HTMLRenderer):
         return self.run_macro(token.name, token.arg, block, Kind.BLOCK)
 
     def render_extended_heading(self, token: Heading) -> str:
-        template = '<a id="{id}"></a><h{level}>{inner}</h{level}>'
+        # TODO: Make this driven by the builder.
+        template = '<a id="{id}" data-hs-anchor="true"></a><h{level}>{inner}</h{level}>'
         level = max(1, min(6, token.level + self.options.shift_headings_by))
         inner = self.render_inner(token)
         return template.format(level=level, id=token.identifier, inner=inner)
