@@ -52,21 +52,26 @@ th, td {
     line-height: 1.4;
 }
 
-.note, .tip, .caution {
+.hs-callout-type-note, .hs-callout-type-tip, .hs-callout-type-caution, .hs-callout-type-warning {
     padding: 1px 10px;
 }
 
-.note {
+.hs-callout-type-note {
     background: #e5f8f6;
     border-left: 5px solid #7fded2;
 }
 
-.tip {
+.hs-callout-type-tip {
     background: #e5f5f8;
     border-left: 5px solid #7fd1de;
 }
 
-.caution {
+.hs-callout-type-caution {
     background: #fdedee;
     border-left: 5px solid #f8a9ad;
+}
+
+.hs-callout-type-warning {
+    background: #ffebe6;
+    border-left: 5px solid #e68250;
 }

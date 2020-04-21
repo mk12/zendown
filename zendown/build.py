@@ -187,6 +187,11 @@ class Html(Builder):
             if node.parent:
                 parents.append(node.parent)
             path = self.index_path(node)
+
+            # I thought this should be unnecessary based on the order of
+            # processing nodes, but there were errors and this fixed it.
+            path.parent.mkdir(parents=True, exist_ok=True)
+
             with open(path, "w") as f:
                 self.write_index(Index(node), f)
 
