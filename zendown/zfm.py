@@ -270,7 +270,7 @@ class ZFMRenderer(HTMLRenderer):
             asset = getattr(token, "zfm_asset", None)
             if asset:
                 token.src = self.ctx.builder.resolve_asset(self.ctx, asset)
-            if self.image_links:
+            if self.image_links and not getattr(token, "zfm_nolink", False):
                 return super().render_link(link(token.src, [token]))
         # TODO: Make this driven by the builder.
         size = ""
