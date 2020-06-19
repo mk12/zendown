@@ -252,7 +252,17 @@ class ZFMRenderer(HTMLRenderer):
             token.target = self.ctx.builder.resolve_link(self.ctx, interlink)
             if not token.children:
                 token.children = [raw_text(interlink.article.title)]
-        return super().render_link(token)
+        # Need noopener for TOC links to work in HubSpot. Otherwise it scrolls
+        # past a bit. Good idea in general to use noopener.
+        # TODO: Make this driven by the builder.
+        template = '<a href="{target}"{title} rel="noopener">{inner}</a>'
+        target = self.escape_url(token.target)
+        if token.title:
+            title = ' title="{}"'.format(self.escape_html(token.title))
+        else:
+            title = ''
+        inner = self.render_inner(token)
+        return template.format(target=target, title=title, inner=inner)
 
     def render_image(self, token: Image) -> str:
         if not getattr(token, "zfm_image_processed", False):
