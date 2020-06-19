@@ -260,7 +260,7 @@ class ZFMRenderer(HTMLRenderer):
         if token.title:
             title = ' title="{}"'.format(self.escape_html(token.title))
         else:
-            title = ''
+            title = ""
         inner = self.render_inner(token)
         return template.format(target=target, title=title, inner=inner)
 
@@ -272,4 +272,27 @@ class ZFMRenderer(HTMLRenderer):
                 token.src = self.ctx.builder.resolve_asset(self.ctx, asset)
             if self.image_links:
                 return super().render_link(link(token.src, [token]))
-        return super().render_image(token)
+        # TODO: Make this driven by the builder.
+        size = ""
+        width_height = getattr(token, "zfm_size", None)
+        if width_height:
+            width, height = width_height
+            size_style = ""
+            if width:
+                size += f' width="{width}"'
+                size_style += f"width:{width}px;"
+            if height:
+                size += f' height="{height}"'
+                size_style += f"height:{height}px;"
+            if size_style:
+                size += f' style="{size_style}"'
+        template = (
+            '<img src="{src}" alt="{alt}"{title} class="hs-image-align-none"{size} />'
+        )
+        if token.title:
+            title = ' title="{}"'.format(self.escape_html(token.title))
+        else:
+            title = ""
+        return template.format(
+            src=token.src, alt=self.render_to_plain(token), title=title, size=size
+        )

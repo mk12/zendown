@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -301,6 +302,16 @@ class Article(Resource):
                         assert self._links is not None
                         self._links.append(link)
                 elif isinstance(token, Image):
+                    # TODO: Refactor this to something nicer.
+                    match = re.fullmatch(
+                        r"^([^=]+)=([0-9]+|\?)x([0-9]+|\?)$", token.src
+                    )
+                    if match:
+                        token.src = match.group(1)
+                        width, height = match.group(2), match.group(3)
+                        width = None if width == "?" else int(width)
+                        height = None if height == "?" else int(height)
+                        token.zfm_size = width, height
                     asset = self.resolve_asset(token.src, project)
                     if asset:
                         token.zfm_asset = asset

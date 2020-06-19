@@ -335,6 +335,8 @@ class Hubspot(Builder):
         subtitle = article.cfg["subtitle"] or ""
         preamble += f"<h2>{html.escape(subtitle)}</h2>\n"
         pyperclip.copy(preamble + body)
+
+    def _open(self, article: Optional[Article]):
         webbrowser.open(self.article_edit_url(article))
 
     def _old_build(self, articles: Sequence[Article]):
@@ -388,9 +390,6 @@ When you're ready, press enter.
         if reply.lower() != "y":
             logging.fatal("aborting")
         subprocess.call(curl)
-
-    def _open(self, article: Optional[Article]):
-        webbrowser.open(self.article_url(article) if article else self.base_url)
 
 
 _builder_list: List[Type[Builder]] = [Html, Hubspot]
