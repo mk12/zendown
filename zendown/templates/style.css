@@ -23,7 +23,7 @@ a img {
     border: none;
 }
 
-img:not([src]*=".svg") {
+img:not([src*=".svg"]) {
     display: block;
     margin: 24px 0;
     margin-left: 50%;
