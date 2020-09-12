@@ -60,7 +60,7 @@ class Builder(ABC):
     def clean(self):
         """Delete the contents of the output directory."""
         if self.needs_fs:
-            rmtree(self.fs.root)
+            rmtree(self.fs.root, ignore_errors=True)
 
     def context(self, article: Article) -> Context:
         """Return a Context object for macros in an article."""
