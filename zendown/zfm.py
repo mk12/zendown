@@ -166,6 +166,7 @@ class RenderOptions(NamedTuple):
     """Options for rendering ZFM."""
 
     shift_headings_by: int = 0
+    exclude_images: bool = False
 
 
 class ZFMRenderer(HTMLRenderer):
@@ -266,6 +267,8 @@ class ZFMRenderer(HTMLRenderer):
         return template.format(target=target, title=title, inner=inner)
 
     def render_image(self, token: Image) -> str:
+        if self.options.exclude_images:
+            return ""
         if not getattr(token, "zfm_image_processed", False):
             token.zfm_image_processed = True
             asset = getattr(token, "zfm_asset", None)

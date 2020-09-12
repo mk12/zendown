@@ -88,6 +88,9 @@ def get_parser() -> Tuple[ArgumentParser, Mapping[str, ArgumentParser]]:
         help="port to use for --watch --open server",
     )
     parser_build.add_argument(
+        "-f", "--flat", action="store_true", help="flat (non-hierarchical) for latex"
+    )
+    parser_build.add_argument(
         "query", nargs="?", default="", help="filter articles by ref",
     )
 
@@ -121,7 +124,7 @@ def command_list(args: Namespace):
 
 def command_build(args: Namespace):
     project = Project.find()
-    builder = builders[args.builder](project, Options())
+    builder = builders[args.builder](project, Options(flat=args.flat))
     if args.clean:
         builder.clean()
     if args.watch:

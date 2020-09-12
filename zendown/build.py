@@ -24,6 +24,7 @@ from typing import (
 )
 from urllib.parse import quote
 
+import pypandoc
 import pyperclip
 from jinja2 import Environment, PackageLoader, escape, select_autoescape
 
@@ -33,13 +34,16 @@ from zendown.config import Config
 from zendown.files import FileSystem
 from zendown.project import Project
 from zendown.resource import Asset
-from zendown.tree import Node
+from zendown.tree import Label, Node
 from zendown.zfm import Context, RenderOptions, ZFMRenderer
 
 
 class Options(NamedTuple):
 
     """Options for building."""
+
+    # Latex: Generate flat sequence of articles instead of hierarchy.
+    flat: bool
 
 
 class Builder(ABC):
@@ -338,7 +342,7 @@ class Hubspot(Builder):
         pyperclip.copy(preamble + body)
 
     def _open(self, article: Optional[Article]):
-        assert article # hubspot builder requires exactly 1 article
+        assert article  # hubspot builder requires exactly 1 article
         webbrowser.open(self.article_edit_url(article))
 
     def _old_build(self, articles: Sequence[Article]):
@@ -394,6 +398,202 @@ When you're ready, press enter.
         subprocess.call(curl)
 
 
-_builder_list: List[Type[Builder]] = [Html, Hubspot]
+class Latex(Builder):
+
+    name = "latex"
+    supports_watch = False
+    needs_fs = True
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.env = Environment(
+            loader=PackageLoader("zendown", "templates"),
+            autoescape=select_autoescape(["html"]),
+        )
+        self.article_template = self.env.get_template("latex_article.html.jinja")
+
+    def _resolve_link(self, ctx: Context, link: Interlink) -> str:
+        return "#foo"
+
+    def _resolve_asset(self, ctx: Context, asset: Asset) -> str:
+        logging.fatal("latex builder should not use assets")
+        assert False
+
+    def _build(self, articles: Sequence[Article]):
+        # Wishlist:
+        # - title page
+        # - TOC on new page
+        # - margins
+        num_depth = None
+        html_path = self.fs.join("build.html")
+        with open(html_path, "w") as f:
+            if self.options.flat:
+                num_depth = 1
+                for node in sorted_sibling_articles(articles):
+                    article = node.item
+                    assert article
+                    self.write_article(article, 1, f)
+            else:
+
+                def visit(node, level):
+                    nonlocal num_depth
+                    if node.item:
+                        if num_depth is None:
+                            # Set num_depth so that we number sections for
+                            # articles, but not headings within articles.
+                            num_depth = level
+                        self.write_article(node.item, level, f)
+                        return
+                    index = Index(node)
+                    # Never make a section for the root. That should be the
+                    # title of the entire document.
+                    if level != 0:
+                        self.write_index(index, level, f)
+                    for child in sorted_child_articles(index):
+                        if not (child.item and child.item.is_index()):
+                            visit(child, level + 1)
+
+                visit(self._find_common_ancestor(articles), 0)
+
+        assert num_depth
+        if num_depth >= 3:
+            top_level_division = "part"
+            # Parts don't count for TOC depth apparently.
+            toc_depth = max(0, num_depth - 1)
+            # Parts and chapters don't count for section depth.
+            sec_num_depth = max(0, num_depth - 2)
+        elif num_depth >= 2:
+            top_level_division = "chapter"
+            toc_depth = num_depth
+            # Chapters don't count for section depth.
+            sec_num_depth = max(0, num_depth - 1)
+        else:
+            top_level_division = "section"
+            toc_depth = num_depth
+            sec_num_depth = num_depth
+
+        with resources.path(templates, "latex_metadata.yml") as p:
+            metadata_file = p
+        with resources.path(templates, "preamble.tex") as p:
+            preamble_file = p
+        with resources.path(templates, "latex_filters.lua") as p:
+            filter_file = p
+        args = [
+            "--standalone",
+            "--number-sections",
+            "--table-of-contents",
+            "--toc-depth",
+            f"{toc_depth}",
+            f"--variable=secnumdepth:{sec_num_depth}",
+            "--metadata-file",
+            metadata_file,
+            "--include-in-header",
+            preamble_file,
+            "--lua-filter",
+            filter_file,
+            "--top-level-division",
+            top_level_division,
+            # "--variable=headerincludes:\\usepackage{mdframed}"
+            # "--variable=margin-left:1in",
+            # "--variable=margin-right:1in",
+            # "--variable=margin-top:1in",
+            # "--variable=margin-bottom:1in",
+        ]
+        latex = pypandoc.convert_file(str(html_path), "latex", extra_args=args)
+        pyperclip.copy(latex)
+
+    def _find_common_ancestor(self, articles: Sequence[Article]) -> Article:
+        article_set = set(articles)
+        roots = []
+
+        def narrow(node):
+            if node.item:
+                if node.item in article_set:
+                    roots.append(node.item)
+                return
+            if Index(node).article in article_set:
+                roots.append(node)
+                return
+            for child in node.children.values():
+                if not (child.item and child.item.is_index()):
+                    narrow(child)
+
+        narrow(self.project.articles.root)
+        if not roots:
+            logging.fatal("no articles found")
+        if len(roots) > 1:
+            logging.fatal("missing a common ancestor in the specified articles")
+        return roots[0]
+
+    def write_article(self, article: Article, level: int, out: TextIO):
+        ctx = self.context(article)
+        article.ensure_resolved(self.project)
+        options = RenderOptions(shift_headings_by=level, exclude_images=True)
+        with ZFMRenderer(ctx, options) as r:
+            body = article.render(r)
+        assert article.cfg
+        vals = {
+            "level": level,
+            "title": article.cfg["title"],
+            "body": body,
+        }
+        out.write(self.article_template.render(**vals))
+
+    def write_index(self, index: Index, level: int, out: TextIO):
+        if index.article:
+            self.write_article(index.article, level, out)
+        else:
+            out.write(f"<h{level}>{index.title} (MISSING TITLE!)</h{level}>")
+
+    def _open(self, article: Optional[Article]):
+        logging.fatal("cannot open latex builder")
+
+
+def sorted_child_articles(index: Index) -> Iterable[Node[Article]]:
+    if index.article:
+        index.article.ensure_loaded()
+        cfg = index.article.cfg
+        assert cfg
+        order = cfg["order"]
+        if order:
+            for name in order:
+                child = next(
+                    (n for n in index.node.children.values() if n.label == Label(name)),
+                    None,
+                )
+                if not child:
+                    logging.fatal(
+                        "%s: in 'order': %s does not exist", index.article.path, name
+                    )
+                    assert False
+                yield child
+            return
+    for child in index.node.children.values():
+        if not (child.item and child.item.is_index()):
+            yield child
+
+
+def sorted_sibling_articles(articles: Sequence[Article]) -> Iterable[Node[Article]]:
+    parent: Optional[Node[Article]] = None
+    siblings: Set[Node[Article]] = set()
+
+    def flush():
+        if not parent:
+            return
+        for child in sorted_child_articles(Index(parent)):
+            if child in siblings:
+                yield child
+
+    for article in articles:
+        if parent and article.node.parent is parent:
+            siblings.add(article.node)
+        else:
+            yield from flush()
+            parent = article.node.parent
+            siblings = {article.node}
+    yield from flush()
+
+
+_builder_list: List[Type[Builder]] = [Html, Hubspot, Latex]
 
 builders = {b.name: b for b in _builder_list}

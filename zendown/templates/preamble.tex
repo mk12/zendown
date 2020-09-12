@@ -1,0 +1,27 @@
+\definecolor{NoteBG}{HTML}{E5F8F6}
+\definecolor{NoteBorder}{HTML}{7FDED2}
+\definecolor{TipBG}{HTML}{E5F5F8}
+\definecolor{TipBorder}{HTML}{7FD1DE}
+\definecolor{CautionBG}{HTML}{FDEDEE}
+\definecolor{CautionBorder}{HTML}{F8A9AD}
+\definecolor{WarningBG}{HTML}{FFEBE6}
+\definecolor{WarningBorder}{HTML}{E68250}
+
+\usepackage{mdframed}
+\mdfsetup{skipabove=\topskip,skipbelow=\topskip}
+
+\newenvironment{Note}%
+  {\begin{mdframed}[linewidth=3pt,backgroundcolor=NoteBG,linecolor=NoteBorder,topline=false,rightline=false,bottomline=false]}%
+  {\end{mdframed}}
+
+\newenvironment{Tip}%
+  {\begin{mdframed}[linewidth=3pt,backgroundcolor=TipBG,linecolor=TipBorder,topline=false,rightline=false,bottomline=false]}%
+  {\end{mdframed}}
+
+\newenvironment{Caution}%
+  {\begin{mdframed}[linewidth=3pt,backgroundcolor=CautionBG,linecolor=CautionBorder,topline=false,rightline=false,bottomline=false]}%
+  {\end{mdframed}}
+
+\newenvironment{Warning}%
+  {\begin{mdframed}[linewidth=3pt,backgroundcolor=WarningBG,linecolor=WarningBorder,topline=false,rightline=false,bottomline=false]}%
+  {\end{mdframed}}

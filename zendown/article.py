@@ -140,6 +140,7 @@ class ArticleConfig(Config):
         "slug": None,  # default set in Article.load
         "subtitle": None,
         "tags": [],
+        "order": [],  # used in index articles to specify order of children
     }
 
 

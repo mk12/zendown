@@ -10,12 +10,16 @@ setup(
     python_requires=">=3.7",
     install_requires=[
         "livereload>=2,<3",
-        "Jinja2>=2,<3" "PyYAML>=4.2b1",
+        "Jinja2>=2,<3",
+        "PyYAML>=4.2b1",
         "mistletoe<2",
+        "pypandoc>=1,<2",
         "pyperclip>=1,<2",
         "python-slugify>=4,<5",
         "watchdog<2",
     ],
-    package_data={"zendown.templates": ["*.jinja", "*.css"],},
+    package_data={
+        "zendown.templates": ["*.jinja", "*.css", "*.tex", "*.yml", "*.lua"],
+    },
     entry_points={"console_scripts": ["zd = zendown.cli:main"]},
 )

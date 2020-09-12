@@ -1,0 +1,6 @@
+## not doing this for now because it indents after lists, callouts, etc. which
+## is ugly.
+# indent: true
+
+# geometry:
+# - margin=1in
