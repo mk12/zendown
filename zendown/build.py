@@ -332,11 +332,13 @@ class Hubspot(Builder):
             body = article.render(r)
         preamble = f"<h1>{html.escape(article.title)}</h1>\n"
         assert article.cfg
-        subtitle = article.cfg["subtitle"] or ""
+        # Convert to string, in case YAML parsed as number or list, etc.
+        subtitle = str(article.cfg["subtitle"] or "")
         preamble += f"<h2>{html.escape(subtitle)}</h2>\n"
         pyperclip.copy(preamble + body)
 
     def _open(self, article: Optional[Article]):
+        assert article # hubspot builder requires exactly 1 article
         webbrowser.open(self.article_edit_url(article))
 
     def _old_build(self, articles: Sequence[Article]):
