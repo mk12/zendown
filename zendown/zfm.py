@@ -180,6 +180,7 @@ class ZFMRenderer(HTMLRenderer):
         self.inline_code_macro = ctx.project.cfg["inline_code_macro"]
         self.smart_typography = ctx.project.cfg["smart_typography"]
         self.image_links = ctx.project.cfg["image_links"]
+        self.image_title_from_alt = ctx.project.cfg["image_title_from_alt"]
 
     def error(self, message: str) -> str:
         """Log an error and render it."""
@@ -289,10 +290,11 @@ class ZFMRenderer(HTMLRenderer):
         template = (
             '<img src="{src}" alt="{alt}"{title} class="hs-image-align-none"{size} />'
         )
+        alt = self.render_to_plain(token)
         if token.title:
             title = ' title="{}"'.format(self.escape_html(token.title))
+        elif self.image_title_from_alt:
+            title = ' title="{}"'.format(alt)
         else:
             title = ""
-        return template.format(
-            src=token.src, alt=self.render_to_plain(token), title=title, size=size
-        )
+        return template.format(src=token.src, alt=alt, title=title, size=size)

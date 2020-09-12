@@ -27,6 +27,7 @@ class ProjectConfig(Config):
         "inline_code_macro": None,
         "smart_typography": False,
         "image_links": False,
+        "image_title_from_alt": False,
     }
 
 
