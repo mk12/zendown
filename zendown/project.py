@@ -160,11 +160,24 @@ class Project:
             resource.unload()
 
     def query(self, substr: str) -> Iterator[Article]:
-        """Iterate over articles whose refs have the given substring."""
-        for ref, article in self.articles.by_ref.items():
-            if substr in str(ref):
-                logging.debug("query %r matched article %s", substr, ref)
-                yield article
+        """Iterate over articles whose refs have the given substring.
+
+        If the query starts with "@", instead yields articles that have the
+        given that value (excluding "@") in their "tags" config.
+        """
+        if substr.startswith("@"):
+            tag = substr[1:]
+            for article in self.articles:
+                article.ensure_loaded()
+                if tag in article.cfg["tags"]:
+                    ref = article.node.ref
+                    logging.debug("query %r matched article %s", substr, ref)
+                    yield article
+        else:
+            for ref, article in self.articles.by_ref.items():
+                if substr in str(ref):
+                    logging.debug("query %r matched article %s", substr, ref)
+                    yield article
 
     @property
     def inverse_links(self) -> Dict[Article, List[Article]]:
