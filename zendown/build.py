@@ -13,6 +13,7 @@ from pathlib import Path
 from shutil import rmtree
 from typing import (
     Any,
+    Dict,
     Iterable,
     List,
     NamedTuple,
@@ -20,6 +21,7 @@ from typing import (
     Sequence,
     Set,
     TextIO,
+    Tuple,
     Type,
 )
 from urllib.parse import quote
@@ -426,36 +428,60 @@ class Latex(Builder):
         # - margins
         num_depth = None
         html_path = self.fs.join("build.html")
+        total_writes = 0
         with open(html_path, "w") as f:
             if self.options.flat:
                 num_depth = 1
                 for node in sorted_sibling_articles(articles):
                     article = node.item
                     assert article
+                    total_writes += 1
                     self.write_article(article, 1, f)
             else:
+                article_set = set(articles)
+                root, relevant_nodes = self._find_common_ancestor(articles)
 
                 def visit(node, level):
                     nonlocal num_depth
+                    nonlocal total_writes
                     if node.item:
+                        if node.item not in article_set:
+                            # Exclude articles not explicitly requested.
+                            return
                         if num_depth is None:
                             # Set num_depth so that we number sections for
                             # articles, but not headings within articles.
                             num_depth = level
+                        total_writes += 1
                         self.write_article(node.item, level, f)
                         return
                     index = Index(node)
                     # Never make a section for the root. That should be the
-                    # title of the entire document.
+                    # title of the entire document. See TODO below.
                     if level != 0:
-                        self.write_index(index, level, f)
+                        # Don't render an index with nothing underneath it.
+                        # NOTE: We could make this just check article_set,
+                        # except pick-and-choose queries don't include indexes.
+                        # Probably need to rethink the whole /index thing.
+                        if node in relevant_nodes:
+                            total_writes += 1
+                            self.write_index(index, level, f)
                     for child in sorted_child_articles(index):
                         if not (child.item and child.item.is_index()):
                             visit(child, level + 1)
 
-                visit(self._find_common_ancestor(articles), 0)
+                root_level = 0
+                if root.item:
+                    # If the root is an article, this means we're rendering a
+                    # single article. In this case start at level 1 because an
+                    # h0 heading doesn't exist.
+                    # TODO: Perhaps this should map onto a title page. This
+                    # would generalize naturally from always having a title page
+                    # for the 0-level.
+                    root_level = 1
+                visit(root, root_level)
 
-        assert num_depth
+        assert num_depth is not None
         if num_depth >= 3:
             top_level_division = "part"
             # Parts don't count for TOC depth apparently.
@@ -480,11 +506,6 @@ class Latex(Builder):
             filter_file = p
         args = [
             "--standalone",
-            "--number-sections",
-            "--table-of-contents",
-            "--toc-depth",
-            f"{toc_depth}",
-            f"--variable=secnumdepth:{sec_num_depth}",
             "--metadata-file",
             metadata_file,
             "--include-in-header",
@@ -493,37 +514,46 @@ class Latex(Builder):
             filter_file,
             "--top-level-division",
             top_level_division,
-            # "--variable=headerincludes:\\usepackage{mdframed}"
-            # "--variable=margin-left:1in",
-            # "--variable=margin-right:1in",
-            # "--variable=margin-top:1in",
-            # "--variable=margin-bottom:1in",
         ]
+        if total_writes > 1:
+            # If there's only one thing, having a table of contents and
+            # numbering makes no sense.
+            args += [
+                "--table-of-contents",
+                "--number-sections",
+                "--toc-depth",
+                f"{toc_depth}",
+                f"--variable=secnumdepth:{sec_num_depth}",
+            ]
         latex = pypandoc.convert_file(str(html_path), "latex", extra_args=args)
         pyperclip.copy(latex)
 
-    def _find_common_ancestor(self, articles: Sequence[Article]) -> Article:
-        article_set = set(articles)
-        roots = []
+    def _find_common_ancestor(
+        self, articles: Sequence[Article]
+    ) -> Tuple[Node[Article], Set[Node[Article]]]:
+        if not articles:
+            logging.fatal("no articles")
 
-        def narrow(node):
-            if node.item:
-                if node.item in article_set:
-                    roots.append(node.item)
-                return
-            if Index(node).article in article_set:
-                roots.append(node)
-                return
-            for child in node.children.values():
-                if not (child.item and child.item.is_index()):
-                    narrow(child)
+        occur_in_paths = set()
 
-        narrow(self.project.articles.root)
-        if not roots:
-            logging.fatal("no articles found")
-        if len(roots) > 1:
-            logging.fatal("missing a common ancestor in the specified articles")
-        return roots[0]
+        def path_to_root(node: Optional[Node[Article]]) -> Dict[Node[Article], int]:
+            path = {}
+            height = 0
+            while node is not None:
+                occur_in_paths.add(node)
+                path[node] = height
+                height += 1
+                node = node.parent
+            return path
+
+        first_path = path_to_root(articles[0].node)
+        common_set = set(first_path.keys())
+        for i in range(1, len(articles)):
+            common_set &= path_to_root(articles[i].node).keys()
+
+        assert common_set, "Must at least have the root in common"
+        # Pick the lowest common ancestor, the one with least height.
+        return min(common_set, key=lambda n: first_path[n]), occur_in_paths
 
     def write_article(self, article: Article, level: int, out: TextIO):
         ctx = self.context(article)

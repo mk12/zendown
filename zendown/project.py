@@ -180,7 +180,7 @@ class Project:
                 if substr in str(ref):
                     logging.debug("query %r matched article %s", substr, ref)
                     yield article
-    
+
     def queries(self, substrs: Iterable[str]) -> Iterator[Article]:
         """Iterate over Project.query(s) for each s in substrs."""
         if not substrs:
