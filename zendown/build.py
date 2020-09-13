@@ -418,7 +418,11 @@ class Latex(Builder):
         self.article_template = self.env.get_template("latex_article.html.jinja")
 
     def _resolve_link(self, ctx: Context, link: Interlink) -> str:
-        return "#foo"
+        # This matches code in zfm.py, render_extended_heading.
+        anchor = str(link.article.node.ref)
+        if link.section:
+            anchor += f":{link.section.node.label}"
+        return f"#{anchor}"
 
     def _resolve_asset(self, ctx: Context, asset: Asset) -> str:
         logging.fatal("latex builder should not use assets")
@@ -573,8 +577,14 @@ class Latex(Builder):
         with ZFMRenderer(ctx, options) as r:
             body = article.render(r)
         assert article.cfg
+        if article.is_index():
+            assert article.node.parent
+            identifier = str(article.node.parent.ref)
+        else:
+            identifier = str(article.node.ref)
         vals = {
             "level": level,
+            "id": identifier,
             "title": article.cfg["title"],
             "body": body,
         }

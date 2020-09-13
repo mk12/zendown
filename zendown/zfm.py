@@ -238,10 +238,17 @@ class ZFMRenderer(HTMLRenderer):
 
     def render_extended_heading(self, token: Heading) -> str:
         # TODO: Make this driven by the builder.
-        template = '<a id="{id}" data-hs-anchor="true"></a><h{level}>{inner}</h{level}>'
+        if self.ctx.builder.name == "latex":
+            template = "<h{level} id={id}>{inner}</h{level}>"
+            identifier = f"{self.ctx.article.node.ref}:{token.identifier}"
+        else:
+            template = (
+                '<a id="{id}" data-hs-anchor="true"></a><h{level}>{inner}</h{level}>'
+            )
+            identifier = token.identifier
         level = max(1, min(6, token.level + self.options.shift_headings_by))
         inner = self.render_inner(token)
-        return template.format(level=level, id=token.identifier, inner=inner)
+        return template.format(level=level, id=identifier, inner=inner)
 
     def render_raw_text(self, token: RawText) -> str:
         if self.smart_typography:
