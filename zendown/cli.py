@@ -95,6 +95,9 @@ def get_parser() -> Tuple[ArgumentParser, Mapping[str, ArgumentParser]]:
         "-f", "--flat", action="store_true", help="flat (non-hierarchical) for latex"
     )
     parser_build.add_argument(
+        "-t", "--top", type=str, help="part/chapter/section for latex"
+    )
+    parser_build.add_argument(
         "queries",
         metavar="QUERY",
         nargs="*",
@@ -132,7 +135,7 @@ def command_list(args: Namespace):
 
 def command_build(args: Namespace):
     project = Project.find()
-    builder = builders[args.builder](project, Options(flat=args.flat))
+    builder = builders[args.builder](project, Options(flat=args.flat, top=args.top))
     if args.clean:
         builder.clean()
     if args.watch:

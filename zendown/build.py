@@ -47,6 +47,9 @@ class Options(NamedTuple):
     # Latex: Generate flat sequence of articles instead of hierarchy.
     flat: bool
 
+    # Latex: Force part/chapter/section top-level headings
+    top: str
+
 
 class Builder(ABC):
 
@@ -482,21 +485,29 @@ class Latex(Builder):
                 visit(root, root_level)
 
         assert num_depth is not None
-        if num_depth >= 3:
+        if self.options.top:
+            top_level_division = self.options.top
+        elif num_depth >= 3:
             top_level_division = "part"
+        elif num_depth >= 2:
+            top_level_division = "chapter"
+        else:
+            top_level_division = "section"
+
+        if top_level_division == "part":
             # Parts don't count for TOC depth apparently.
             toc_depth = max(0, num_depth - 1)
             # Parts and chapters don't count for section depth.
             sec_num_depth = max(0, num_depth - 2)
-        elif num_depth >= 2:
-            top_level_division = "chapter"
+        elif top_level_division == "chapter":
             toc_depth = num_depth
             # Chapters don't count for section depth.
             sec_num_depth = max(0, num_depth - 1)
-        else:
-            top_level_division = "section"
+        elif top_level_division == "section":
             toc_depth = num_depth
             sec_num_depth = num_depth
+        else:
+            assert False
 
         with resources.path(templates, "latex_metadata.yml") as p:
             metadata_file = p
