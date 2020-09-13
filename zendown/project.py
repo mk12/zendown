@@ -149,7 +149,7 @@ class Project:
         """Iterate over all articles in the project."""
         return self.articles.by_ref.values()
 
-    def all_resouces(self) -> Iterator[Resource]:
+    def all_resources(self) -> Iterator[Resource]:
         """Iterate over all resources in the project."""
         yield from self.articles.by_ref.values()
         yield from self.assets.by_ref.values()
@@ -170,6 +170,7 @@ class Project:
             tag = substr[1:]
             for article in self.articles:
                 article.ensure_loaded()
+                assert article.cfg
                 if tag in article.cfg["tags"]:
                     ref = article.node.ref
                     logging.debug("query %r matched article %s", substr, ref)
@@ -179,6 +180,14 @@ class Project:
                 if substr in str(ref):
                     logging.debug("query %r matched article %s", substr, ref)
                     yield article
+    
+    def queries(self, substrs: Iterable[str]) -> Iterator[Article]:
+        """Iterate over Project.query(s) for each s in substrs."""
+        if not substrs:
+            yield from self.all_articles()
+        else:
+            for s in substrs:
+                yield from self.query(s)
 
     @property
     def inverse_links(self) -> Dict[Article, List[Article]]:

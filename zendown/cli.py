@@ -60,7 +60,7 @@ def get_parser() -> Tuple[ArgumentParser, Mapping[str, ArgumentParser]]:
         "-f", "--files", action="store_true", help="show file paths instead of refs"
     )
     parser_list.add_argument(
-        "query", nargs="?", default="", help="filter articles by ref",
+        "queries", metavar="QUERY", nargs="*", default="", help="filter articles by ref",
     )
 
     parser_build = commands.add_parser("build", help="build the project")
@@ -91,7 +91,7 @@ def get_parser() -> Tuple[ArgumentParser, Mapping[str, ArgumentParser]]:
         "-f", "--flat", action="store_true", help="flat (non-hierarchical) for latex"
     )
     parser_build.add_argument(
-        "query", nargs="?", default="", help="filter articles by ref",
+        "queries", metavar="QUERY", nargs="*", default="", help="filter articles by ref",
     )
 
     for subparser in [parser_new, parser_list, parser_build]:
@@ -118,7 +118,7 @@ def command_new(args: Namespace):
 
 def command_list(args: Namespace):
     project = Project.find()
-    for article in project.query(args.query):
+    for article in project.queries(args.queries):
         print(article.path if args.files else article.node.ref)
 
 
@@ -137,5 +137,5 @@ def command_build(args: Namespace):
             server = Server(port=args.port, builder=builder)
         Watcher(project, builder, server).run()
     else:
-        articles = project.query(args.query)
+        articles = project.queries(args.queries)
         builder.build(articles, open_output=args.open)
