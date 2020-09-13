@@ -141,8 +141,8 @@ def command_build(args: Namespace):
     if args.watch:
         if not builder.supports_watch:
             logging.fatal("build target %s does not support --watch", args.builder)
-        if args.query:
-            logging.warning("query %r ignored for --watch", args.query)
+        if args.queries:
+            logging.warning("queries %s ignored for --watch", args.queries)
         server = None
         if args.open:
             server = Server(port=args.port, builder=builder)
