@@ -530,6 +530,12 @@ class Latex(Builder):
             "--top-level-division",
             top_level_division,
         ]
+        user_metadata_file = Path("./latex/metadata.yml")
+        user_preamble_file = Path("./latex/preamble.tex")
+        if user_metadata_file.exists():
+            args += ["--metadata-file", user_metadata_file]
+        if user_preamble_file.exists():
+            args += ["--include-in-header", user_preamble_file]
         if total_writes > 1:
             # If there's only one thing, having a table of contents and
             # numbering makes no sense.
