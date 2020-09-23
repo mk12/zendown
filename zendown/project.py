@@ -157,7 +157,7 @@ class Project:
 
     def unload_all(self):
         """Unload all resources in the project."""
-        for resource in self.all_resouces():
+        for resource in self.all_resources():
             resource.unload()
 
     def query(self, substr: str) -> Iterator[Article]:
