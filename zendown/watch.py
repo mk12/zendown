@@ -80,7 +80,7 @@ class Handler(FileSystemEventHandler):
         )
 
     def on_any_event(self, event: FileSystemEvent):
-        path = Path(event.src_path).relative_to(self.project.fs.root)
+        path = Path(event.src_path).relative_to(Path.cwd()).relative_to(self.project.fs.root)
         if not self.matches(path):
             return
         if isinstance(event, FileModifiedEvent):
@@ -118,6 +118,7 @@ class Server:
         self.port = port
         self.server = livereload.Server()
         self.server.root = builder.fs.root
+        self.server.default_filename = ""
         self.loop: Optional[IOLoop] = None
 
     @property
