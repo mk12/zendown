@@ -118,7 +118,7 @@ class Server:
         self.port = port
         self.server = livereload.Server()
         self.server.root = builder.fs.root
-        self.server.default_filename = ""
+        self.server.default_filename = "index.html"
         self.loop: Optional[IOLoop] = None
 
     @property
